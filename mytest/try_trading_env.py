@@ -1,9 +1,8 @@
 import gym
 
-#import gym_trading
+import gym_trading
 import pandas as pd
 import numpy as np
-import trading_env as te
 
 pd.set_option('display.width',500)
 

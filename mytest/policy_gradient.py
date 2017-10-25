@@ -15,7 +15,7 @@ import logging
 import os.path
 import pandas as pd
 
-import trading_env as te
+import gym_trading.envs.trading_env as te
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
