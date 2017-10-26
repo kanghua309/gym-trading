@@ -18,6 +18,6 @@ pg = policy_gradient.PolicyGradient(sess, obs_dim=8, num_actions=3, learning_rat
 
 # train model, loading if possible
 alldf,summrzed = pg.train_model( env,episodes=1001, log_freq=100)#, load_model=True)
-#print df
+print summrzed
 #pd.DataFrame(sharpes).expanding().mean().plot()
 

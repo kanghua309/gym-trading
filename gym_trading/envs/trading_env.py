@@ -122,7 +122,6 @@ class ZiplineEnvSrc(object):
 
     df = pd.DataFrame()
     df['Return'] = (_df.close - _df.close.shift()) / _df.close.shift()
-    print "------------return : \n",df['Return'].head(10)
     df['H20'] = _df.high / _df.open
     df['L20'] = _df.low / _df.open
     df['C2O'] = _df.close / _df.open
@@ -249,14 +248,14 @@ class TradingSim(object) :
             'position','costs', 'trade' ]
     rets = _prices2returns(self.navs)
     #pdb.set_trace()
-    df = pd.DataFrame( {'action':     self.actions, # today's action (from agent)
+    df = pd.DataFrame( {  'action':     self.actions, # today's action (from agent)
                           'bod_nav':    self.navs,    # BOD Net Asset Value (NAV)
-                          'mkt_nav':  self.mkt_nav, 
+                          'mkt_nav':    self.mkt_nav, # 净赚？
                           'mkt_return': self.mkt_retrns,
                           'sim_return': self.strat_retrns,
                           'position':   self.posns,   # EOD position
-                          'costs':  self.costs,   # eod costs
-                          'trade':  self.trades },# eod trade
+                          'costs':      self.costs,   # eod costs
+                          'trade':      self.trades },# eod trade
                          columns=cols)
     return df
 
@@ -313,7 +312,7 @@ class TradingEnv(gym.Env):
     observation, done = self.src._step()
     # Close    Volume     Return  ClosePctl  VolumePctl
     yret = observation[0] #FIX IT
-    print "yret:",yret ," action:",action
+    #print "yret:",yret ," action:",action
     reward, info = self.sim._step( action, yret )
       
     #info = { 'pnl': daypnl, 'nav':self.nav, 'costs':costs }

@@ -18,7 +18,8 @@ import pandas as pd
 import gym_trading.envs.trading_env as te
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+logging.basicConfig()
+log.setLevel(logging.DEBUG)
 log.info('%s logger started.',__name__)
 
 class PolicyGradient(object) :
@@ -56,8 +57,7 @@ class PolicyGradient(object) :
                                                    initializer=L2)
        
         # tf placeholders
-        print "_tf_x:",obs_dim
-        print "_tf_y:", num_actions
+
         self._tf_x = tf.placeholder(dtype=tf.float32, shape=[None, obs_dim],name="tf_x")
         self._tf_y = tf.placeholder(dtype=tf.float32, shape=[None, num_actions],name="tf_y")
         self._tf_epr = tf.placeholder(dtype=tf.float32, shape=[None,1], name="tf_epr")
@@ -128,7 +128,7 @@ class PolicyGradient(object) :
             feed = {self._tf_x: np.reshape(x, (1,-1))}
             aprob = self._sess.run(self._tf_aprob,feed)
             aprob = aprob[0,:] # we live in a batched world :/
-
+            #print "random choice :",episode,self._num_actions,aprob
             action = np.random.choice(self._num_actions, p=aprob)
             label = np.zeros_like(aprob) ; label[action] = 1 # make a training 'label'
 
@@ -143,6 +143,7 @@ class PolicyGradient(object) :
             rs.append(reward)
             day += 1
             if done:
+                print "episode %s is done" % episode
                 running_reward = running_reward * 0.99 + reward_sum * 0.01
                 epx = np.vstack(xs)
                 epr = np.vstack(rs)
@@ -161,15 +162,18 @@ class PolicyGradient(object) :
                 if episode % log_freq == 0:
                     log.info('year #%6d, mean reward: %8.4f, sim ret: %8.4f, mkt ret: %8.4f, net: %8.4f', episode,
                              running_reward, simrors[episode],mktrors[episode], simrors[episode]-mktrors[episode])
+                    #print('year #%6d, mean reward: %8.4f, sim ret: %8.4f, mkt ret: %8.4f, net: %8.4f', episode,
+                    #         running_reward, simrors[episode], mktrors[episode], simrors[episode] - mktrors[episode])
                     save_path = self._saver.save(self._sess, model_dir+'model.ckpt',
                                                  global_step=episode+1)
                     if episode > 100:
                         vict = pd.DataFrame( { 'sim': simrors[episode-100:episode],
                                                'mkt': mktrors[episode-100:episode] } )
                         vict['net'] = vict.sim - vict.mkt
-                        if vict.net.mean() > 0.0:
+                        if vict.net.mean() > 0.1:
                             victory = True
                             log.info('Congratulations, Warren Buffet!  You won the trading game.')
+                            #print ('Congratulations, Warren Buffet!  You won the trading game.')
                     #print("Model saved in file: {}".format(save_path))
 
                 
