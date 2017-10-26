@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 In this example we demonstrate how to implement a DQN agent and
 train it to trade optimally on a periodic price signal.
@@ -12,6 +14,7 @@ from keras.layers import Dense
 from keras.models import Sequential
 from keras.optimizers import Adam
 import gym
+import gym_trading  #必须引入才自动注册
 
 
 class DQNAgent:
@@ -55,17 +58,35 @@ class DQNAgent:
         brain.add(Dense(self.action_size, activation='linear'))
         brain.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
         return brain
-
+    '''
     def act(self, state):
         """Acting Policy of the DQNAgent
         """
         action = np.zeros(self.action_size)
+        print "action:",action
         if np.random.rand() <= self.epsilon:
             action[random.randrange(self.action_size)] = 1
         else:
             state = state.reshape(1, self.state_size)
             act_values = self.brain.predict(state)
             action[np.argmax(act_values[0])] = 1
+        return action
+    '''
+    def act(self, state):
+        """Acting Policy of the DQNAgent
+        """
+        #action = np.zeros(self.action_size)
+        #print "action:", action
+        if np.random.rand() <= self.epsilon:
+            #action[random.randrange(self.action_size)] = 1
+            action = random.randrange(self.action_size)
+        else:
+            state = state.reshape(1, self.state_size)
+            act_values = self.brain.predict(state)
+            #action[np.argmax(act_values[0])] = 1
+            print "x:",np.argmax(act_values[0])
+            action = np.argmax(act_values[0])
+        #print "action:", action
         return action
 
     def observe(self, state, action, reward, next_state, done, warming_up=False):
@@ -82,7 +103,13 @@ class DQNAgent:
                        * np.amax(self.brain.predict(next_state),
                                  axis=1))
             q_target = self.brain.predict(state)
-            q_target[action[0], action[1]] = reward
+            print "state :",state,np.shape(state)
+            print "reward :",reward,np.shape(reward)
+            print "action :",action,np.shape(action)
+            print "q_target :",q_target,np.shape(q_target)
+            #q_target[action[0], action[1]] = reward
+            q_target[:,action] = reward
+
             return self.brain.fit(state, q_target,
                                   batch_size=self.batch_size,
                                   epochs=1,
@@ -94,26 +121,34 @@ class DQNAgent:
            Process action_batch into a position vector
         """
         batch = np.array(random.sample(self.memory, self.batch_size))
+        #print "batch :",batch
+        print "---------------------",self.batch_size,self.state_size
+        print batch[:, 1]
+        print batch[:, 2]
         state_batch = np.concatenate(batch[:, 0])\
             .reshape(self.batch_size, self.state_size)
-        action_batch = np.concatenate(batch[:, 1])\
-            .reshape(self.batch_size, self.action_size)
+        #action_batch = np.concatenate(batch[:, 1])\
+        #    .reshape(self.batch_size, self.action_size)
+        action_batch = batch[:, 1]
+
         reward_batch = batch[:, 2]
         next_state_batch = np.concatenate(batch[:, 3])\
             .reshape(self.batch_size, self.state_size)
         done_batch = batch[:, 4]
         # action processing
-        action_batch = np.where(action_batch == 1)
+        #action_batch = np.where(action_batch == 1)
+
+        print "action_batch:",action_batch
         return state_batch, action_batch, reward_batch, next_state_batch, done_batch
 
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
-    from tgym.envs import SpreadTrading
-    from tgym.gens.deterministic import WavySignal
+    #from tgym.envs import SpreadTrading
+    #from tgym.gens.deterministic import WavySignal
     # Instantiating the environmnent
-    generator = WavySignal(period_1=25, period_2=50, epsilon=-0.5)
+    #generator = WavySignal(period_1=25, period_2=50, epsilon=-0.5)
     episodes = 50
     episode_length = 400
     trading_fee = .2
@@ -132,12 +167,13 @@ if __name__ == "__main__":
 
     state = environment.reset()
     # Instantiating the agent
-    memory_size = 3000
+    memory_size = 100
     state_size = len(state)
     gamma = 0.96
     epsilon_min = 0.01
     batch_size = 64
-    action_size = len(SpreadTrading._actions)
+    #action_size = len(environment._actions)
+    action_size = 3 #FIXIT
     train_interval = 10
     learning_rate = 0.001
     agent = DQNAgent(state_size=state_size,
@@ -151,10 +187,16 @@ if __name__ == "__main__":
                      batch_size=batch_size,
                      epsilon_min=epsilon_min)
     # Warming up the agent
-    for _ in range(memory_size):
+    for _i in range(memory_size):
         action = agent.act(state)
-        next_state, reward, done, _ = environment.step(action)
+        print "action:", action
+        next_state, reward, done, info = environment.step(action)
+        print _i, next_state, reward, done, info
+        if done == True:
+            environment.reset()
+            continue
         agent.observe(state, action, reward, next_state, done, warming_up=True)
+    print "Warming up over .............."
     # Training the agent
     for ep in range(episodes):
         state = environment.reset()

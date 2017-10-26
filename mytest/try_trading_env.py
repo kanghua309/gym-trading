@@ -9,7 +9,7 @@ import numpy as np
 pd.set_option('display.width',500)
 
 env = gym.make('trading-v0').env
-env.initialise(symbol='000001',start='2015-01-01',end='2017-01-01',days=256)
+env.initialise(symbol='000001',start='2015-01-01',end='2017-01-01',days=252)
 #env.time_cost_bps = 0
 
 Episodes=1
@@ -42,7 +42,7 @@ for _ in range(Episodes):
         
 df = env.sim.to_df()
 
-df.head()
+print df.tail()
 #df.tail()
 
 #buyhold = lambda x,y : 2
