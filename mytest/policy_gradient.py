@@ -56,6 +56,8 @@ class PolicyGradient(object) :
                                                    initializer=L2)
        
         # tf placeholders
+        print "_tf_x:",obs_dim
+        print "_tf_y:", num_actions
         self._tf_x = tf.placeholder(dtype=tf.float32, shape=[None, obs_dim],name="tf_x")
         self._tf_y = tf.placeholder(dtype=tf.float32, shape=[None, num_actions],name="tf_y")
         self._tf_epr = tf.placeholder(dtype=tf.float32, shape=[None,1], name="tf_epr")

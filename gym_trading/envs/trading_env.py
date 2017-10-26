@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
@@ -98,9 +100,7 @@ class ZiplineEnvSrc(object):
   MinPercentileDays = 100
 
   #QuandlAuthToken = ""  # not necessary, but can be used if desired
-  Name = "000001"  # "
-
-  def __init__(self,symbol,start,end ,days=252, scale=True):
+  def __init__(self,symbol,start,end,days=252, scale=True):
     self.symbol = symbol
     #self.auth = auth
     self.days = days + 1
@@ -109,31 +109,39 @@ class ZiplineEnvSrc(object):
 
     #df = quandl.get(self.name) if self.auth == '' else quandl.get(self.name, authtoken=self.auth)
     #log.info('got data for %s from quandl...', QuandlEnvSrc.Name)
-    panel = research.get_pricing([self.symbol],start,end,'1d',['close','volume'])
-    df = panel.transpose(2, 1, 0).iloc[0]
+    print "debug :", self.symbol,start,end
+    panel = research.get_pricing([self.symbol],start,end,'1d',['close','low','high','open','volume'])
+    _df = panel.transpose(2, 1, 0).iloc[0]
 
 
-    df = df[~np.isnan(df.volume)][['close', 'volume']]
+    #df = df[~np.isnan(df.volume)][['close', 'volume']]
     # we calculate returns and percentiles, then kill nans
-    df = df[['close', 'volume']]
-    df.volume.replace(0, 1, inplace=True)  # days shouldn't have zero volume..
-    df['Return'] = (df.close - df.close.shift()) / df.close.shift()
+    #df = df[['close', 'volume']]
+    _df.volume.replace(0, 1, inplace=True)  # days shouldn't have zero volume..
+    _df.dropna(axis=0, inplace=True)
+
+    df = pd.DataFrame()
+    df['Return'] = (_df.close - _df.close.shift()) / _df.close.shift()
+    print "------------return : \n",df['Return'].head(10)
+    df['H20'] = _df.high / _df.open
+    df['L20'] = _df.low / _df.open
+    df['C2O'] = _df.close / _df.open
+    df['H2C'] = _df.high / _df.close
+    df['L2C'] = _df.low / _df.close
+    df['H2L'] = _df.high / _df.low
+    df['VOL'] = _df.volume
 
     #pctrank = lambda x: pd.Series(x).rank(pct=True).iloc[-1]
     #df['ClosePctl'] = df.close.expanding(self.MinPercentileDays).apply(pctrank)
     #df['VolumePctl'] = df.volume.expanding(self.MinPercentileDays).apply(pctrank)
     #df.dropna(axis=0, inplace=True)
-
-    R = df.Return
+    #R = df.Return
     #if scale:
     #  mean_values = df.mean(axis=0)
 
     #  std_values = df.std(axis=0)
     #  df = (df - np.array(mean_values)) / np.array(std_values)
-
-    #是我的办法，比值计算
-
-    df['Return'] = R  # we don't want our returns scaled
+    #df['Return'] = R  # we don't want our returns scaled
     self.min_values = df.min(axis=0)
     self.max_values = df.max(axis=0)
     self.data = df
@@ -141,7 +149,10 @@ class ZiplineEnvSrc(object):
 
   def reset(self):
     # we want contiguous data
+    #print self.data.index
+    #print len(self.data.index)
     self.idx = np.random.randint(low=0, high=len(self.data.index) - self.days)
+    #self.idx = 0
     self.step = 0
 
   def _step(self):
@@ -163,24 +174,32 @@ class TradingSim(object) :
     self.time_cost_bps    = time_cost_bps
     self.steps            = steps
     # change every step
-    self._reset()
+    self.step = 0
+    self.actions = np.zeros(self.steps)
+    self.navs = np.ones(self.steps)
+    self.mkt_nav = np.ones(self.steps)
+    self.strat_retrns = np.ones(self.steps)
+    self.posns = np.zeros(self.steps)
+    self.costs = np.zeros(self.steps)
+    self.trades = np.zeros(self.steps)
+    self.mkt_retrns = np.zeros(self.steps)
 
 
 
   def reset(self, train=True):
-    self.total_reward = 0
-    self.total_trades = 0
-    self.average_profit_per_trade = 0
-    self.count_open_trades = 0
+    #self.total_reward = 0
+    #self.total_trades = 0
+    #self.average_profit_per_trade = 0
+    #self.count_open_trades = 0
 
-    if train:
-      self.current_time = 1
-    else:
-      self.current_time = self.train_end + 1
+    #if train:
+    #  self.current_time = 1
+    #else:
+    #  self.current_time = self.train_end + 1
 
-    self.curr_trade = {'Entry Price': 0, 'Exit Price': 0, 'Entry Time': None, 'Exit Time': None, 'Profit': 0,'Trade Duration': 0, 'Type': None, 'reward': 0}
-    self.journal = []
-    self.open_trade = False
+    #self.curr_trade = {'Entry Price': 0, 'Exit Price': 0, 'Entry Time': None, 'Exit Time': None, 'Profit': 0,'Trade Duration': 0, 'Type': None, 'reward': 0}
+    #self.journal = []
+    #self.open_trade = False
     self.step = 0
     self.actions.fill(0)
     self.navs.fill(1)
@@ -199,16 +218,16 @@ class TradingSim(object) :
     bod_nav  = 1.0 if self.step == 0 else self.navs[self.step-1]
     mkt_nav  = 1.0 if self.step == 0 else self.mkt_nav[self.step-1]
 
-    #  action - 1 flat ; 0 short ; 2 long
-    #  pos - 0  -1  1
-    if (action == 0 and bod_posn != 1) or (action == 2 and  bod_posn != 0) :
-        msg = "Pre Pos is %s , can not do action %s" % (bod_posn,action)
-        _thorwErr(msg)
+    #  action # 1 flat ; 0 short ; 2 long
+    #  pos    # 0  -1  1
+    #if (action == 0 and bod_posn != 1) or (action == 2 and  bod_posn != 0) : #我们没有-1状态；允许开仓情况下，再发出买入信号？ 或 平仓情况下，还发出卖出信号？ —— 是否是中强化
+    #    msg = "Pre Pos is %s , can not do action %s" % (bod_posn,action)
+    #    _thorwErr(msg)
 
     self.mkt_retrns[self.step] = retrn
     self.actions[self.step] = action
     
-    self.posns[self.step] = action - 1   #只可能是 1,2
+    self.posns[self.step] = action - 1
     self.trades[self.step] = self.posns[self.step] - bod_posn
     
     trade_costs_pct = abs(self.trades[self.step]) * self.trading_cost_bps 
@@ -270,13 +289,17 @@ class TradingEnv(gym.Env):
   metadata = {'render.modes': ['human']}
 
   def __init__(self):
-    self.days = 252
-    self.src = ZiplineEnvSrc(days=self.days)
-    self.sim = TradingSim(steps=self.days, trading_cost_bps=1e-3,time_cost_bps=1e-4)
-    self.action_space = spaces.Discrete( 3 )
-    self.observation_space= spaces.Box( self.src.min_values,
-                                        self.src.max_values)
-    self.reset()
+      pass
+
+  def initialise(self,symbol,start,end,days):
+      print "debug :", symbol,start,end,days
+      self.days = days
+      self.src = ZiplineEnvSrc(symbol=symbol, start=start, end=end, days=self.days)
+      self.sim = TradingSim(steps=self.days, trading_cost_bps=1e-3, time_cost_bps=1e-4)
+      self.action_space = spaces.Discrete(3)
+      self.observation_space = spaces.Box(self.src.min_values,
+                                          self.src.max_values)
+      self.reset()
 
   def _configure(self, display=None):
     self.display = display
@@ -289,8 +312,8 @@ class TradingEnv(gym.Env):
     assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
     observation, done = self.src._step()
     # Close    Volume     Return  ClosePctl  VolumePctl
-    yret = observation[2]
-
+    yret = observation[0] #FIX IT
+    print "yret:",yret ," action:",action
     reward, info = self.sim._step( action, yret )
       
     #info = { 'pnl': daypnl, 'nav':self.nav, 'costs':costs }
@@ -312,9 +335,16 @@ class TradingEnv(gym.Env):
     """run provided strategy, returns dataframe with all steps"""
     observation = self.reset()
     done = False
+    #bod_posn = 0.0
+    count =0
     while not done:
       action = strategy( observation, self ) # call strategy
+      #if (action == 0 and bod_posn != 1) or (action == 2 and bod_posn != 0):
+      #    continue
       observation, reward, done, info = self.step(action)
+      #bod_posn = info['pos']
+      count += 1
+      print observation, reward, done, info, count
 
     return self.sim.to_df() if return_df else None
       
