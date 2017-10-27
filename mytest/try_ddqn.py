@@ -24,6 +24,8 @@ class DQN:
         self.epsilon_decay = 0.995
         self.learning_rate = 0.005
         self.tau = .125
+        self.batch_size = 25
+        self.state_size = self.env.observation_space.shape[0]
 
         self.model = self.create_model()
         self.target_model = self.create_model()
@@ -31,7 +33,8 @@ class DQN:
     def create_model(self):
         model = Sequential()
         state_shape = self.env.observation_space.shape
-        model.add(Dense(24, input_dim=state_shape[0], activation="relu"))
+        print 'state_shape:',self.env.observation_space.shape
+        model.add(Dense(24, input_dim=self.state_size, activation="relu"))
         model.add(Dense(48, activation="relu"))
         model.add(Dense(24, activation="relu"))
         model.add(Dense(self.env.action_space.n))
@@ -40,6 +43,8 @@ class DQN:
         return model
 
     def act(self, state):
+        """Acting Policy of the DQNAgent
+        """
         self.epsilon *= self.epsilon_decay
         self.epsilon = max(self.epsilon_min, self.epsilon)
         if np.random.random() < self.epsilon:
@@ -50,24 +55,69 @@ class DQN:
         self.memory.append([state, action, reward, new_state, done])
 
     def replay(self):
+        """Memory Management and training of the agent
+        """
         batch_size = 32
         if len(self.memory) < batch_size:
             return
 
-        samples = random.sample(self.memory, batch_size)
+        #samples = random.sample(self.memory, batch_size)
+        state, action, reward, next_state, done = self._get_batches()
+        reward += (self.gamma
+                   * np.logical_not(done)
+                   * np.amax(self.model.predict(next_state),axis=1))
+        q_target = self.target_model.predict(state)
+        # print "state :",state,np.shape(state)
+        # print "reward :",reward,np.shape(reward)
+        # print "action :",action,np.shape(action)
+        # print "q_target :",q_target,np.shape(q_target)
+        # q_target[action[0], action[1]] = reward
+        # where?
+        _ = pd.Series(action)
+        one_hot = pd.get_dummies(_).as_matrix()
+        action_batch = np.where(one_hot == 1)
+        # print "batch:",action_batch
+        q_target[action_batch] = reward
+        return self.model.fit(state, q_target,
+                              batch_size=self.batch_size,
+                              epochs=1,
+                              verbose=False)
+        '''
         for sample in samples:
             state, action, reward, new_state, done = sample
             target = self.target_model.predict(state)
             #print "q_target :",target,np.shape(target)
             #print target[0]
             #print target[0][action]
-
             if done:
                 target[0][action] = reward
             else:
                 Q_future = max(self.target_model.predict(new_state)[0])
                 target[0][action] = reward + Q_future * self.gamma
             self.model.fit(state, target, epochs=1, verbose=0)
+        '''
+
+    def _get_batches(self):
+        """Selecting a batch of memory
+           Split it into categorical subbatches
+           Process action_batch into a position vector
+        """
+        batch = np.array(random.sample(self.memory, self.batch_size))
+        state_batch = np.concatenate(batch[:, 0]) \
+            .reshape(self.batch_size, self.state_size)
+        # action_batch = np.concatenate(batch[:, 1])\
+        #    .reshape(self.batch_size, self.action_size)
+        action_batch = batch[:, 1]
+
+        reward_batch = batch[:, 2]
+        next_state_batch = np.concatenate(batch[:, 3]) \
+            .reshape(self.batch_size, self.state_size)
+        done_batch = batch[:, 4]
+        # action processing
+        # action_batch = np.where(action_batch == 1)
+        # print "action_batch:",action_batch
+        return state_batch, action_batch, reward_batch, next_state_batch, done_batch
+
 
     def target_train(self):
         weights = self.model.get_weights()
@@ -83,8 +133,8 @@ class DQN:
 def main():
     env = gym.make('trading-v0').env
     env.initialise(symbol='000001', start='2015-01-01', end='2017-01-01', days=252)
-    gamma = 0.9
-    epsilon = .95
+    #gamma = 0.9
+    #epsilon = .95
 
     trials = 1000
     trial_len = 500
@@ -92,8 +142,8 @@ def main():
     # updateTargetNetwork = 1000
     dqn_agent = DQN(env=env)
     steps = []
-    simrors = np.zeros(trials*252)
-    mktrors = np.zeros(trials*252)
+    simrors = np.zeros(trials)
+    mktrors = np.zeros(trials)
     i = 0
     victory = False
     for trial in range(trials):
@@ -107,10 +157,8 @@ def main():
             #print  new_state, reward, done, _
             # reward = reward if not done else -20
             new_state = new_state.reshape(1, 8)
-            #print "new_state2:",new_state
 
             dqn_agent.remember(cur_state, action, reward, new_state, done)
-
             dqn_agent.replay()  # internally iterates default (prediction) model
             dqn_agent.target_train()  # iterates target model
 
