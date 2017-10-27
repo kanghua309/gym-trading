@@ -11,7 +11,8 @@ from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
 
 from collections import deque
-
+import matplotlib.pyplot as plt
+plt.ion()
 
 class DQN:
     def __init__(self, env):
@@ -134,6 +135,9 @@ def main():
     #gamma = 0.9
     #epsilon = .95
 
+    global fig
+    fig = plt.figure(figsize=(10, 4))
+
     trials = 1000
     trial_len = 500
 
@@ -147,22 +151,37 @@ def main():
     for trial in range(trials):
         if victory == True:
             break;
-        cur_state = env.reset().reshape(1, 8)
+        cur_state = env.reset().reshape(1, 9) #FIX IT
         for step in range(trial_len):
             action = dqn_agent.act(cur_state)
             #print "action;",action,i
             new_state, reward, done, _ = env.step(action)
             #print  new_state, reward, done, _
             # reward = reward if not done else -20
-            new_state = new_state.reshape(1, 8)
+            new_state = new_state.reshape(1, 9)
             dqn_agent.remember(cur_state, action, reward, new_state, done)
 
             dqn_agent.replay()  # internally iterates default (prediction) model
             dqn_agent.target_train()  # iterates target model
 
             cur_state = new_state
-
             i += 1
+            #####################################################################################
+
+            env.render()
+            #plt.axvline(x=400, color='black', linestyle='--')
+            #plt.text(250, 400, 'training data')
+            #plt.text(450, 400, 'test data')
+            plt.suptitle(str(trial)+":"+str(step))
+            #f = str(trial) + '.png'
+            #plt.savefig(f, bbox_inches='tight', pad_inches=1, dpi=72)
+            #plt.close('all')
+           # print "save over f %s" % f
+            #plt.show（）
+            plt.pause(0.001)
+            plt.draw()
+            #plt.close()
+            ####################################################################################
             if done:
                 print "done: - - - ",trial,step
                 #break

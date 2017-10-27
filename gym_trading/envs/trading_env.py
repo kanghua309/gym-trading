@@ -15,6 +15,7 @@ import pdb
 import numpy as np
 import pandas as pd
 from me.helper.research_env import Research
+import matplotlib.pyplot as plt
 
 import tempfile
 
@@ -129,6 +130,7 @@ class ZiplineEnvSrc(object):
     df['L2C'] = _df.low / _df.close
     df['H2L'] = _df.high / _df.low
     df['VOL'] = _df.volume
+    df['Price'] = _df.close
 
     #pctrank = lambda x: pd.Series(x).rank(pct=True).iloc[-1]
     #df['ClosePctl'] = df.close.expanding(self.MinPercentileDays).apply(pctrank)
@@ -323,10 +325,67 @@ class TradingEnv(gym.Env):
     self.src.reset()
     self.sim.reset()
     return self.src._step()[0]
-    
+
+  def _plotTrades(self):
+    """
+    visualise trades on the price chart
+        long entry : green triangle up
+        short entry : red triangle down
+        exit : black circle
+    """
+    l = ['price']
+    p = self.src.data['Price']
+    #print p
+    p = p.reset_index(drop=True).head(252)
+    #print p
+
+    p.plot(style='x-')
+    # ---plot markers
+    # this works, but I rather prefer colored markers for each day of position rather than entry-exit signals
+    '''
+    indices = {'g^': self.trades[self.trades > 0].index ,
+                'ko':self.trades[self.trades == 0].index,
+                'rv':self.trades[self.trades < 0].index}
+
+
+    for style, idx in indices.items():
+          if len(idx) > 0:
+             p[idx].plot(style=style)
+    '''
+    # --- plot trades
+    # colored line for long positions
+    idx = (pd.Series(self.sim.posns) > 0) | (pd.Series(self.sim.posns) > 0).shift(1)
+    #print (self.sim.posns > 0)
+    #print idx.any()
+    if idx.any():
+      p[idx].plot(style='go')
+      l.append('long')
+
+    # colored line for short positions
+    idx = (pd.Series(self.sim.posns) < 0) | (pd.Series(self.sim.posns)< 0).shift(1)
+    if idx.any():
+      p[idx].plot(style='ro')
+      l.append('short')
+
+    plt.xlim([p.index[0], p.index[-1]])  # show full axis
+
+    plt.legend(l, loc='best')
+    plt.title('trades')
+    print "----------- plot over 1 --------------- "
+
+
   def _render(self, mode='human', close=False):
     #... TODO
-    pass
+    #plt.figure(figsize=(3, 4))
+    print "call render now"
+    return self._plotTrades()
+    #plt.axvline(x=400, color='black', linestyle='--')
+    #plt.text(250, 400, 'training data')
+    #plt.text(450, 400, 'test data')
+    #plt.suptitle(str(epoch))
+    #plt.savefig('./' + str(epoch) + '.png', bbox_inches='tight', pad_inches=1, dpi=72)
+    #plt.close('all')
+    #pass
 
   # some convenience functions:
   
