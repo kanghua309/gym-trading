@@ -207,7 +207,7 @@ if __name__ == "__main__":
             continue
         agent.observe(state, action, reward, next_state, done, warming_up=True)
     print "Warming up over .............."
-    # Training the agent
+     # Training the agent
     for ep in range(episodes):
         state = environment.reset()
         rew = 0
@@ -226,12 +226,17 @@ if __name__ == "__main__":
               + "| loss:" + str(round(loss.history["loss"][0], 4)))
 
     # Running the agent
+    print "Train  over .............."
+
     done = False
     state = environment.reset()
     while not done:
         action = agent.act(state)
         state, _, done, info = environment.step(action)
+        print info
         if 'status' in info and info['status'] == 'Closed plot':
+            print "done  True .............."
             done = True
         else:
+            print "render  True .............."
             environment.render()

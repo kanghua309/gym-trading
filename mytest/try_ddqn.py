@@ -57,8 +57,8 @@ class DQN:
     def replay(self):
         """Memory Management and training of the agent
         """
-        batch_size = 32
-        if len(self.memory) < batch_size:
+        if len(self.memory) < self.batch_size:
+            #print "----- memory not reach limit ,return"
             return
 
         #samples = random.sample(self.memory, batch_size)
@@ -113,14 +113,12 @@ class DQN:
         next_state_batch = np.concatenate(batch[:, 3]) \
             .reshape(self.batch_size, self.state_size)
         done_batch = batch[:, 4]
-        # action processing
-        # action_batch = np.where(action_batch == 1)
-        # print "action_batch:",action_batch
         return state_batch, action_batch, reward_batch, next_state_batch, done_batch
 
 
     def target_train(self):
         weights = self.model.get_weights()
+        #print "target train weight:",weights
         target_weights = self.target_model.get_weights()
         for i in range(len(target_weights)):
             target_weights[i] = weights[i] * self.tau + target_weights[i] * (1 - self.tau)
@@ -141,7 +139,7 @@ def main():
 
     # updateTargetNetwork = 1000
     dqn_agent = DQN(env=env)
-    steps = []
+    #steps = []
     simrors = np.zeros(trials)
     mktrors = np.zeros(trials)
     i = 0
@@ -153,16 +151,17 @@ def main():
         for step in range(trial_len):
             action = dqn_agent.act(cur_state)
             #print "action;",action,i
-            new_state, reward, done, _ = env.step(action)  # step 入口参数只有action，所以说状态在内部维护
+            new_state, reward, done, _ = env.step(action)
             #print  new_state, reward, done, _
             # reward = reward if not done else -20
             new_state = new_state.reshape(1, 8)
-
             dqn_agent.remember(cur_state, action, reward, new_state, done)
+
             dqn_agent.replay()  # internally iterates default (prediction) model
             dqn_agent.target_train()  # iterates target model
 
             cur_state = new_state
+
             i += 1
             if done:
                 print "done: - - - ",trial,step
