@@ -1,12 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import random
 
-import numpy as np
-from keras.layers import Dense
-from keras.models import Sequential
-from keras.optimizers import Adam
-import gym
 import gym_trading  #必须引入才自动注册
 import gym
 import numpy as np
@@ -131,8 +125,8 @@ def main():
         #        dqn_agent.save_model("trial-{}.model".format(trial))
         #else:
                 df = env.sim.to_df()
-                print df.tail()
-                print df.bod_nav.values[-1]
+                #print df.tail()
+                #print df.bod_nav.values[-1]
                 # pdb.set_trace()
                 simrors[trial] = df.bod_nav.values[-1] - 1  # compound returns
                 mktrors[trial] = df.mkt_nav.values[-1] - 1
@@ -144,13 +138,14 @@ def main():
 
                 #print simrors[i - 100:i]
                 #print mktrors[i - 100:i]
-                vict = pd.DataFrame({'sim': simrors[trial - 100:trial],
-                                     'mkt': mktrors[trial - 100:trial]})
-                vict['net'] = vict.sim - vict.mkt
-                print('vict:',vict.net.mean())
-                if vict.net.mean() > 0.1:
-                    victory = True
-                    print('Congratulations, Warren Buffet!  You won the trading game.')
+                if trial > 3:
+                    vict = pd.DataFrame({'sim': simrors[trial - 3:trial],
+                                         'mkt': mktrors[trial - 3:trial]})
+                    vict['net'] = vict.sim - vict.mkt
+                    print('vict:',vict.net.mean())
+                    if vict.net.mean() > 0.2:
+                        victory = True
+                        print('Congratulations, Warren Buffet!  You won the trading game.')
                 break
 
 

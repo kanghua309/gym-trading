@@ -10,6 +10,7 @@ Inspired from https://github.com/keon/deep-q-learning
 import random
 
 import numpy as np
+import pandas as pd
 from keras.layers import Dense
 from keras.models import Sequential
 from keras.optimizers import Adam
@@ -84,7 +85,7 @@ class DQNAgent:
             state = state.reshape(1, self.state_size)
             act_values = self.brain.predict(state)
             #action[np.argmax(act_values[0])] = 1
-            print "x:",np.argmax(act_values[0])
+            #print "x:",np.argmax(act_values[0])
             action = np.argmax(act_values[0])
         #print "action:", action
         return action
@@ -103,12 +104,17 @@ class DQNAgent:
                        * np.amax(self.brain.predict(next_state),
                                  axis=1))
             q_target = self.brain.predict(state)
-            print "state :",state,np.shape(state)
-            print "reward :",reward,np.shape(reward)
-            print "action :",action,np.shape(action)
-            print "q_target :",q_target,np.shape(q_target)
+            #print "state :",state,np.shape(state)
+            #print "reward :",reward,np.shape(reward)
+            #print "action :",action,np.shape(action)
+            #print "q_target :",q_target,np.shape(q_target)
             #q_target[action[0], action[1]] = reward
-            q_target[:,action] = reward
+            #where?
+            _ = pd.Series(action)
+            one_hot = pd.get_dummies(_).as_matrix()
+            action_batch = np.where(one_hot == 1)
+            #print "batch:",action_batch
+            q_target[action_batch] = reward
 
             return self.brain.fit(state, q_target,
                                   batch_size=self.batch_size,
@@ -122,9 +128,13 @@ class DQNAgent:
         """
         batch = np.array(random.sample(self.memory, self.batch_size))
         #print "batch :",batch
-        print "---------------------",self.batch_size,self.state_size
-        print batch[:, 1]
-        print batch[:, 2]
+        #print "---------------------",self.batch_size,self.state_size
+        #state, action, reward, next_state, done
+        #print batch[:, 0]
+        #print batch[:, 1]
+        #print batch[:, 2]
+        #print batch[:, 3]
+        #print batch[:, 4]
         state_batch = np.concatenate(batch[:, 0])\
             .reshape(self.batch_size, self.state_size)
         #action_batch = np.concatenate(batch[:, 1])\
@@ -138,7 +148,7 @@ class DQNAgent:
         # action processing
         #action_batch = np.where(action_batch == 1)
 
-        print "action_batch:",action_batch
+        #print "action_batch:",action_batch
         return state_batch, action_batch, reward_batch, next_state_batch, done_batch
 
 
@@ -189,9 +199,9 @@ if __name__ == "__main__":
     # Warming up the agent
     for _i in range(memory_size):
         action = agent.act(state)
-        print "action:", action
+        #print "action:", action
         next_state, reward, done, info = environment.step(action)
-        print _i, next_state, reward, done, info
+        #print _i, next_state, reward, done, info
         if done == True:
             environment.reset()
             continue
@@ -207,10 +217,14 @@ if __name__ == "__main__":
             loss = agent.observe(state, action, reward, next_state, done)
             state = next_state
             rew += reward
+            if done == True:
+                environment.reset()
+                continue
         print("Ep:" + str(ep)
               + "| rew:" + str(round(rew, 2))
               + "| eps:" + str(round(agent.epsilon, 2))
               + "| loss:" + str(round(loss.history["loss"][0], 4)))
+
     # Running the agent
     done = False
     state = environment.reset()
