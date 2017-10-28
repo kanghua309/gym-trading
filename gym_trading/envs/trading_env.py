@@ -147,6 +147,7 @@ class ZiplineEnvSrc(object):
     self.max_values = df.max(axis=0)
     self.data = df
     self.step = 0
+    self.first_idx = 0
 
   def reset(self):
     # we want contiguous data
@@ -155,6 +156,7 @@ class ZiplineEnvSrc(object):
     self.idx = np.random.randint(low=0, high=len(self.data.index) - self.days)
     #self.idx = 0
     self.step = 0
+    self.first_idx = self.idx
 
   def _step(self):
     obs = self.data.iloc[self.idx].as_matrix()
@@ -333,13 +335,12 @@ class TradingEnv(gym.Env):
         short entry : red triangle down
         exit : black circle
     """
-    l = ['price']
-    p = self.src.data['Price']
-    #print p
+    print self.src.first_idx
+    p = self.src.data['Price'][self.src.first_idx:]  #TODO
     p = p.reset_index(drop=True).head(252)
-    #print p
-
-    p.plot(style='x-')
+    h1 = p.plot(style='kx-', label = 'price')
+    h = [h1]
+    l = ['price']
     # ---plot markers
     # this works, but I rather prefer colored markers for each day of position rather than entry-exit signals
     '''
@@ -358,18 +359,22 @@ class TradingEnv(gym.Env):
     #print (self.sim.posns > 0)
     #print idx.any()
     if idx.any():
-      p[idx].plot(style='go')
+      h2 = p[idx].plot(style='go')
+      h.append(h2)
       l.append('long')
 
     # colored line for short positions
     idx = (pd.Series(self.sim.posns) < 0) | (pd.Series(self.sim.posns)< 0).shift(1)
     if idx.any():
-      p[idx].plot(style='ro')
+      h3= p[idx].plot(style='ro')
+      h.append(h3)
       l.append('short')
 
     plt.xlim([p.index[0], p.index[-1]])  # show full axis
+    print "legend:",l
+    plt.legend(l ,loc='upper right')
+    #plt.legend()
 
-    plt.legend(l, loc='best')
     plt.title('trades')
     print "----------- plot over 1 --------------- "
 

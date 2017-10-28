@@ -167,7 +167,7 @@ def main():
             cur_state = new_state
             i += 1
             #####################################################################################
-
+            plt.clf()
             env.render()
             #plt.axvline(x=400, color='black', linestyle='--')
             #plt.text(250, 400, 'training data')
@@ -178,7 +178,7 @@ def main():
             #plt.close('all')
            # print "save over f %s" % f
             #plt.show（）
-            plt.pause(0.001)
+            plt.pause(0.0001)
             plt.draw()
             #plt.close()
             ####################################################################################
