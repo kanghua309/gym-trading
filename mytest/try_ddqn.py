@@ -7,29 +7,30 @@ import numpy as np
 import pandas as pd
 import random
 from keras.models import Sequential
-from keras.layers import Dense, Dropout
-from keras.optimizers import Adam
+from keras.layers.core import Dense, Dropout, Activation
+from keras.layers.recurrent import LSTM
+from keras.optimizers import RMSprop, Adam
 
 from collections import deque
 import matplotlib.pyplot as plt
-plt.ion()
 
 class DQN:
     def __init__(self, env):
         self.env = env
         self.memory = deque(maxlen=2000)
 
-        self.gamma = 0.85
+        self.gamma = 0.95
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
-        self.learning_rate = 0.005
+        self.learning_rate = 0.001
         self.tau = .125
-        self.batch_size = 25
+        self.batch_size = 64
         self.state_size = self.env.observation_space.shape[0]
 
         self.model = self.create_model()
         self.target_model = self.create_model()
+
 
     def create_model(self):
         model = Sequential()
@@ -42,6 +43,30 @@ class DQN:
         model.compile(loss="mean_squared_error",
                       optimizer=Adam(lr=self.learning_rate))
         return model
+    '''
+    def create_model(self):
+        model = Sequential()
+        state_shape = self.env.observation_space.shape
+        print 'self.state_size:', self.state_size
+        model.add(LSTM(64,
+                       input_shape=(1, self.state_size),
+                       return_sequences=True,
+                       stateful=False))
+        model.add(Dropout(0.5))
+        model.add(LSTM(64,
+                       input_shape=(1, self.state_size),
+                       return_sequences=False,
+                       stateful=False))
+        model.add(Dropout(0.5))
+
+        model.add(Dense(4, init='lecun_uniform'))
+        model.add(Activation('linear'))  # linear output so we can have range of real-valued outputs
+
+        rms = RMSprop()
+        adam = Adam()
+        model.compile(loss='mse', optimizer=adam)
+        return model
+    '''
 
     def act(self, state):
         """Acting Policy of the DQNAgent
@@ -50,6 +75,7 @@ class DQN:
         self.epsilon = max(self.epsilon_min, self.epsilon)
         if np.random.random() < self.epsilon:
             return self.env.action_space.sample()
+        #return np.argmax(self.model.predict(state,batch_size=1))
         return np.argmax(self.model.predict(state)[0])
 
     def remember(self, state, action, reward, new_state, done):
@@ -59,15 +85,17 @@ class DQN:
         """Memory Management and training of the agent
         """
         if len(self.memory) < self.batch_size:
-            #print "----- memory not reach limit ,return"
             return
 
-        #samples = random.sample(self.memory, batch_size)
         state, action, reward, next_state, done = self._get_batches()
         reward += (self.gamma
                    * np.logical_not(done)
                    * np.amax(self.model.predict(next_state),axis=1))
         q_target = self.target_model.predict(state)
+        #reward += (self.gamma
+        #           * np.logical_not(done)
+        #           * np.amax(self.model.predict(next_state,batch_size=1), axis=1))
+        #q_target = self.target_model.predict(state,batch_size=1)
         # print "state :",state,np.shape(state)
         # print "reward :",reward,np.shape(reward)
         # print "action :",action,np.shape(action)
@@ -83,20 +111,7 @@ class DQN:
                               batch_size=self.batch_size,
                               epochs=1,
                               verbose=False)
-        '''
-        for sample in samples:
-            state, action, reward, new_state, done = sample
-            target = self.target_model.predict(state)
-            #print "q_target :",target,np.shape(target)
-            #print target[0]
-            #print target[0][action]
-            if done:
-                target[0][action] = reward
-            else:
-                Q_future = max(self.target_model.predict(new_state)[0])
-                target[0][action] = reward + Q_future * self.gamma
-            self.model.fit(state, target, epochs=1, verbose=0)
-        '''
+
 
     def _get_batches(self):
         """Selecting a batch of memory
@@ -132,11 +147,6 @@ class DQN:
 def main():
     env = gym.make('trading-v0').env
     env.initialise(symbol='000001', start='2015-01-01', end='2017-01-01', days=252)
-    #gamma = 0.9
-    #epsilon = .95
-
-    global fig
-    fig = plt.figure(figsize=(10, 4))
 
     trials = 1000
     trial_len = 500
@@ -151,14 +161,14 @@ def main():
     for trial in range(trials):
         if victory == True:
             break;
-        cur_state = env.reset().reshape(1, 9) #FIX IT
+        cur_state = env.reset().reshape(1,env.observation_space.shape[0]) #FIX IT
         for step in range(trial_len):
             action = dqn_agent.act(cur_state)
             #print "action;",action,i
             new_state, reward, done, _ = env.step(action)
             #print  new_state, reward, done, _
             # reward = reward if not done else -20
-            new_state = new_state.reshape(1, 9)
+            new_state = new_state.reshape(1,env.observation_space.shape[0])
             dqn_agent.remember(cur_state, action, reward, new_state, done)
 
             dqn_agent.replay()  # internally iterates default (prediction) model
@@ -166,24 +176,17 @@ def main():
 
             cur_state = new_state
             i += 1
-            #####################################################################################
-            plt.clf()
-            env.render()
-            #plt.axvline(x=400, color='black', linestyle='--')
-            #plt.text(250, 400, 'training data')
-            #plt.text(450, 400, 'test data')
-            plt.suptitle(str(trial)+":"+str(step))
-            #f = str(trial) + '.png'
-            #plt.savefig(f, bbox_inches='tight', pad_inches=1, dpi=72)
-            #plt.close('all')
-           # print "save over f %s" % f
-            #plt.show（）
-            plt.pause(0.0001)
-            plt.draw()
-            #plt.close()
+
+            if trial > 30:
+                #####################################################################################
+                print "trail is :",trial
+                env.render()
+
+
             ####################################################################################
+
             if done:
-                print "done: - - - ",trial,step
+                print "done: -https://github.com/kanghua309/spearmint-1.git - - ",trial,step
                 #break
         #if step >= 199:
         #    print("Failed to complete in trial {}".format(trial))
@@ -194,6 +197,8 @@ def main():
                 #print df.tail()
                 #print df.bod_nav.values[-1]
                 # pdb.set_trace()
+                #print df.bod_nav.values
+                #print df.bod_nav.values[-1]
                 simrors[trial] = df.bod_nav.values[-1] - 1  # compound returns
                 mktrors[trial] = df.mkt_nav.values[-1] - 1
 
@@ -204,12 +209,12 @@ def main():
 
                 #print simrors[i - 100:i]
                 #print mktrors[i - 100:i]
-                if trial > 3:
-                    vict = pd.DataFrame({'sim': simrors[trial - 3:trial],
-                                         'mkt': mktrors[trial - 3:trial]})
+                if trial > 30:
+                    vict = pd.DataFrame({'sim': simrors[trial - 1:trial],
+                                         'mkt': mktrors[trial - 1:trial]})
                     vict['net'] = vict.sim - vict.mkt
                     print('vict:',vict.net.mean())
-                    if vict.net.mean() > 0.2:
+                    if vict.net.mean() > 3.0:
                         victory = True
                         print('Congratulations, Warren Buffet!  You won the trading game.')
                 break

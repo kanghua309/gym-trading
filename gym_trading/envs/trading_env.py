@@ -34,9 +34,6 @@ def _prices2returns(prices):
   R = np.append( R[0].values, 0)
   return R
 
-def _thorwErr(msg):
-  raise Exception(msg)
-
 
 '''
 class QuandlEnvSrc(object):
@@ -91,7 +88,8 @@ class QuandlEnvSrc(object):
     return obs,done
 '''
 
-
+ret = lambda x,y: np.log(y/x) #Log return
+zscore = lambda x:(x -x.mean())/x.std() # zscore
 
 class ZiplineEnvSrc(object):
   # Quandl-based implementation of a TradingEnv's data source.
@@ -105,6 +103,8 @@ class ZiplineEnvSrc(object):
     self.symbol = symbol
     #self.auth = auth
     self.days = days + 1
+    print "debug : 0 "
+
     log.info('getting data for %s from zipline bundle...', symbol)
     research = Research()
 
@@ -118,19 +118,19 @@ class ZiplineEnvSrc(object):
     #df = df[~np.isnan(df.volume)][['close', 'volume']]
     # we calculate returns and percentiles, then kill nans
     #df = df[['close', 'volume']]
-    _df.volume.replace(0, 1, inplace=True)  # days shouldn't have zero volume..
+    #_df.volume.replace(0, 1, inplace=True)  # days shouldn't have zero volume..
     _df.dropna(axis=0, inplace=True)
 
     df = pd.DataFrame()
-    df['Return'] = (_df.close - _df.close.shift()) / _df.close.shift()
-    df['H20'] = _df.high / _df.open
-    df['L20'] = _df.low / _df.open
-    df['C2O'] = _df.close / _df.open
-    df['H2C'] = _df.high / _df.close
-    df['L2C'] = _df.low / _df.close
-    df['H2L'] = _df.high / _df.low
-    df['VOL'] = _df.volume
-    df['Price'] = _df.close
+    df['Return'] = (_df.close-_df.close.shift())/_df.close.shift() # today return
+    df['H20'] = zscore(ret(_df.high,_df.open))
+    df['L20'] = zscore(ret(_df.low,_df.open))
+    df['C2O'] = zscore(ret(_df.close,_df.open))
+    df['H2C'] = zscore(ret(_df.high,_df.close))
+    df['L2C'] = zscore(ret(_df.low,_df.close))
+    df['H2L'] = zscore(ret(_df.high,_df.low))
+    df['VOL'] = zscore(_df.volume)
+    #df['Price'] = _df.close
 
     #pctrank = lambda x: pd.Series(x).rank(pct=True).iloc[-1]
     #df['ClosePctl'] = df.close.expanding(self.MinPercentileDays).apply(pctrank)
@@ -147,20 +147,20 @@ class ZiplineEnvSrc(object):
     self.max_values = df.max(axis=0)
     self.data = df
     self.step = 0
-    self.first_idx = 0
+    self.orgin_idx = 0
+    self.prices = _df.close
 
   def reset(self):
     # we want contiguous data
     #print self.data.index
     #print len(self.data.index)
     self.idx = np.random.randint(low=0, high=len(self.data.index) - self.days)
-    #self.idx = 0
     self.step = 0
-    self.first_idx = self.idx
+    self.orgin_idx = self.idx  #for render , so record it
 
   def _step(self):
     obs = self.data.iloc[self.idx].as_matrix()
-    self.idx += 1
+    self.idx  += 1
     self.step += 1
     done = self.step >= self.days
     return obs, done
@@ -186,6 +186,7 @@ class TradingSim(object) :
     self.costs = np.zeros(self.steps)
     self.trades = np.zeros(self.steps)
     self.mkt_retrns = np.zeros(self.steps)
+
 
 
 
@@ -250,11 +251,11 @@ class TradingSim(object) :
     """returns internal state in new dataframe """
     cols = ['action', 'bod_nav', 'mkt_nav','mkt_return','sim_return',
             'position','costs', 'trade' ]
-    rets = _prices2returns(self.navs)
+    #rets = _prices2returns(self.navs)
     #pdb.set_trace()
     df = pd.DataFrame( {  'action':     self.actions, # today's action (from agent)
                           'bod_nav':    self.navs,    # BOD Net Asset Value (NAV)
-                          'mkt_nav':    self.mkt_nav, # 净赚？
+                          'mkt_nav':    self.mkt_nav, #
                           'mkt_return': self.mkt_retrns,
                           'sim_return': self.strat_retrns,
                           'position':   self.posns,   # EOD position
@@ -292,17 +293,21 @@ class TradingEnv(gym.Env):
   metadata = {'render.modes': ['human']}
 
   def __init__(self):
+      self.inited = False;
       pass
 
   def initialise(self,symbol,start,end,days):
-      print "debug :", symbol,start,end,days
       self.days = days
       self.src = ZiplineEnvSrc(symbol=symbol, start=start, end=end, days=self.days)
       self.sim = TradingSim(steps=self.days, trading_cost_bps=1e-3, time_cost_bps=1e-4)
+
       self.action_space = spaces.Discrete(3)
       self.observation_space = spaces.Box(self.src.min_values,
                                           self.src.max_values)
       self.reset()
+      self.inited = True
+      self.render_on = 0
+      self.reset_count = 0
 
   def _configure(self, display=None):
     self.display = display
@@ -312,78 +317,90 @@ class TradingEnv(gym.Env):
     return [seed]
 
   def _step(self, action):
+    if self.inited == False : return
     assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
     observation, done = self.src._step()
-    # Close    Volume     Return  ClosePctl  VolumePctl
-    yret = observation[0] #FIX IT
+    yret = observation[0] #RETURN
     #print "yret:",yret ," action:",action
     reward, info = self.sim._step( action, yret )
-      
-    #info = { 'pnl': daypnl, 'nav':self.nav, 'costs':costs }
-
     return observation, reward, done, info
   
   def _reset(self):
+    if self.inited == False : return
+    self.reset_count += 1
     self.src.reset()
     self.sim.reset()
     return self.src._step()[0]
 
-  def _plotTrades(self):
+  def _plot_trades(self):
     """
     visualise trades on the price chart
         long entry : green triangle up
         short entry : red triangle down
         exit : black circle
     """
-    print self.src.first_idx
-    p = self.src.data['Price'][self.src.first_idx:]  #TODO
-    p = p.reset_index(drop=True).head(252)
-    h1 = p.plot(style='kx-', label = 'price')
-    h = [h1]
+    ####################################################################
+    plt.clf()
+    plt.subplot(3, 1, 1)
+    p = self.src.prices[self.src.orgin_idx:]  #TODO
+    p = p.reset_index(drop=True).head(self.days)
+    p.plot(style='kx-', label = 'price')
     l = ['price']
-    # ---plot markers
-    # this works, but I rather prefer colored markers for each day of position rather than entry-exit signals
-    '''
-    indices = {'g^': self.trades[self.trades > 0].index ,
-                'ko':self.trades[self.trades == 0].index,
-                'rv':self.trades[self.trades < 0].index}
-
-
-    for style, idx in indices.items():
-          if len(idx) > 0:
-             p[idx].plot(style=style)
-    '''
     # --- plot trades
     # colored line for long positions
-    idx = (pd.Series(self.sim.posns) > 0) | (pd.Series(self.sim.posns) > 0).shift(1)
-    #print (self.sim.posns > 0)
-    #print idx.any()
+    idx = (pd.Series(self.sim.trades) > 0)
     if idx.any():
-      h2 = p[idx].plot(style='go')
-      h.append(h2)
+      p[idx].plot(style='go')
       l.append('long')
-
     # colored line for short positions
-    idx = (pd.Series(self.sim.posns) < 0) | (pd.Series(self.sim.posns)< 0).shift(1)
+    idx = (pd.Series(self.sim.trades) < 0)
     if idx.any():
-      h3= p[idx].plot(style='ro')
-      h.append(h3)
+      p[idx].plot(style='ro')
       l.append('short')
 
     plt.xlim([p.index[0], p.index[-1]])  # show full axis
-    print "legend:",l
     plt.legend(l ,loc='upper right')
-    #plt.legend()
-
     plt.title('trades')
-    print "----------- plot over 1 --------------- "
+    plt.draw()
 
+    ####################################################################
+    plt.subplot(3, 1, 2)
+    #plt.clf()
+    pd.Series(self.sim.mkt_nav).plot()
+    #print self.sim.mkt_nav
+    plt.title('market net value')
+    plt.draw()
+
+    plt.subplot(3, 1, 3)
+    #plt.clf()
+    pd.Series(self.sim.navs).plot()
+    #print self.sim.navs
+    plt.title('simulate net value')
+    plt.draw()
+
+    #print self.sim.to_df()
+
+
+    return plt
 
   def _render(self, mode='human', close=False):
-    #... TODO
     #plt.figure(figsize=(3, 4))
-    print "call render now"
-    return self._plotTrades()
+    if self.inited == False : return
+
+    if self.render_on == 0:
+       #self.fig = plt.figure(figsize=(10, 4))
+       self.fig = plt.figure(figsize=(12, 9))
+       self.render_on = 1
+       plt.ion()
+       #plt.show()
+
+    #plt.clf()
+    self._plot_trades()
+    plt.suptitle(str("round:" + str(self.reset_count) + "-" + str("step:" + str(self.src.idx - self.src.orgin_idx))))
+    #plt.draw()
+    plt.pause(0.001)
+    return self.fig
+
     #plt.axvline(x=400, color='black', linestyle='--')
     #plt.text(250, 400, 'training data')
     #plt.text(450, 400, 'test data')
@@ -391,10 +408,10 @@ class TradingEnv(gym.Env):
     #plt.savefig('./' + str(epoch) + '.png', bbox_inches='tight', pad_inches=1, dpi=72)
     #plt.close('all')
     #pass
-
   # some convenience functions:
   
   def run_strat(self,  strategy, return_df=True):
+    if self.inited == False : return
     """run provided strategy, returns dataframe with all steps"""
     observation = self.reset()
     done = False
@@ -412,6 +429,8 @@ class TradingEnv(gym.Env):
     return self.sim.to_df() if return_df else None
       
   def run_strats( self, strategy, episodes=1, write_log=True, return_df=True):
+    if self.inited == False : return
+
     """ run provided strategy the specified # of times, possibly
         writing a log and possibly returning a dataframe summarizing activity.
     
