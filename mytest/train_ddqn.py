@@ -177,7 +177,7 @@ def main():
             cur_state = new_state
             i += 1
 
-            if trial > 30:
+            if trial > 3000:
                 #####################################################################################
                 print "trail is :",trial
                 env.render()
@@ -186,7 +186,7 @@ def main():
             ####################################################################################
 
             if done:
-                print "done: -https://github.com/kanghua309/spearmint-1.git - - ",trial,step
+                print "done:",trial,step
                 #break
         #if step >= 199:
         #    print("Failed to complete in trial {}".format(trial))
@@ -214,7 +214,7 @@ def main():
                                          'mkt': mktrors[trial - 1:trial]})
                     vict['net'] = vict.sim - vict.mkt
                     print('vict:',vict.net.mean())
-                    if vict.net.mean() > 3.0:
+                    if vict.net.mean() > 30.0:
                         victory = True
                         print('Congratulations, Warren Buffet!  You won the trading game.')
                 break

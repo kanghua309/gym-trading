@@ -98,17 +98,13 @@ class ZiplineEnvSrc(object):
 
   MinPercentileDays = 100
 
-  #QuandlAuthToken = ""  # not necessary, but can be used if desired
   def __init__(self,symbol,start,end,days=252, scale=True):
     self.symbol = symbol
-    #self.auth = auth
     self.days = days + 1
-    print "debug : 0 "
 
     log.info('getting data for %s from zipline bundle...', symbol)
     research = Research()
 
-    #df = quandl.get(self.name) if self.auth == '' else quandl.get(self.name, authtoken=self.auth)
     #log.info('got data for %s from quandl...', QuandlEnvSrc.Name)
     print "debug :", self.symbol,start,end
     panel = research.get_pricing([self.symbol],start,end,'1d',['close','low','high','open','volume'])
@@ -155,6 +151,7 @@ class ZiplineEnvSrc(object):
     #print self.data.index
     #print len(self.data.index)
     self.idx = np.random.randint(low=0, high=len(self.data.index) - self.days)
+    #self.idx = 0
     self.step = 0
     self.orgin_idx = self.idx  #for render , so record it
 
@@ -233,11 +230,19 @@ class TradingSim(object) :
     
     self.posns[self.step] = action - 1
     self.trades[self.step] = self.posns[self.step] - bod_posn
-    
+
     trade_costs_pct = abs(self.trades[self.step]) * self.trading_cost_bps 
     self.costs[self.step] = trade_costs_pct +  self.time_cost_bps
     reward = ( (bod_posn * retrn) - self.costs[self.step] )
     self.strat_retrns[self.step] = reward
+    #print (self.step,retrn)
+    #print ("debug ----- :action:%d,bod_posn,%d,posn:%d,trades:%d,trade_costs_pct:%f,costs:%f,reward:%f" % (action,
+    #                                                                                            bod_posn,
+    #                                                                                             self.posns[self.step],
+    #                                                                                             self.trades[self.step],
+    #                                                                                             trade_costs_pct,
+    #                                                                                             self.costs[self.step],
+    #                                                                                             reward))
 
     if self.step != 0 :
       self.navs[self.step] =  bod_nav * (1 + self.strat_retrns[self.step-1])
@@ -333,14 +338,8 @@ class TradingEnv(gym.Env):
     return self.src._step()[0]
 
   def _plot_trades(self):
-    """
-    visualise trades on the price chart
-        long entry : green triangle up
-        short entry : red triangle down
-        exit : black circle
-    """
+
     ####################################################################
-    plt.clf()
     plt.subplot(3, 1, 1)
     p = self.src.prices[self.src.orgin_idx:]  #TODO
     p = p.reset_index(drop=True).head(self.days)
@@ -365,22 +364,16 @@ class TradingEnv(gym.Env):
 
     ####################################################################
     plt.subplot(3, 1, 2)
-    #plt.clf()
-    pd.Series(self.sim.mkt_nav).plot()
-    #print self.sim.mkt_nav
+    pd.Series(self.sim.mkt_nav).plot(style='g')
     plt.title('market net value')
     plt.draw()
 
     plt.subplot(3, 1, 3)
-    #plt.clf()
-    pd.Series(self.sim.navs).plot()
-    #print self.sim.navs
+    pd.Series(self.sim.navs).plot(style='r')
     plt.title('simulate net value')
     plt.draw()
 
     #print self.sim.to_df()
-
-
     return plt
 
   def _render(self, mode='human', close=False):
@@ -394,7 +387,7 @@ class TradingEnv(gym.Env):
        plt.ion()
        #plt.show()
 
-    #plt.clf()
+    plt.clf()
     self._plot_trades()
     plt.suptitle(str("round:" + str(self.reset_count) + "-" + str("step:" + str(self.src.idx - self.src.orgin_idx))))
     #plt.draw()
