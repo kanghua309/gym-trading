@@ -23,9 +23,9 @@ class DQN:
         self.epsilon = 1.0
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
-        self.learning_rate = 0.001
+        self.learning_rate = 0.0001
         self.tau = .125
-        self.batch_size = 64
+        self.batch_size = 64 # 64 TODO
         self.state_size = self.env.observation_space.shape[0]
 
         self.model = self.create_model()
@@ -72,10 +72,14 @@ class DQN:
         """
         self.epsilon *= self.epsilon_decay
         self.epsilon = max(self.epsilon_min, self.epsilon)
+        #print "------------------------ epsilon 0:",self.epsilon
+
         if np.random.random() < self.epsilon:
             return self.env.action_space.sample()
         #return np.argmax(self.model.predict(state,batch_size=1))
         qval = self.model.predict(state, batch_size=1)
+        #print "------------------------ qval 0:", np.argmax(qval),qval,state
+        assert np.any(np.isnan(qval)) == False
         #print "b",np.shape(state),state,np.shape(qval),qval
         return np.argmax(qval)
         #return np.argmax(self.model.predict(state,batch_size=1))
@@ -151,7 +155,7 @@ def main():
     env = gym.make('trading-v0').env
     env.initialise(symbol='000001', start='2015-01-01', end='2017-01-01', days=252)
 
-    trials = 10
+    trials = 500
     trial_len = 500
 
     # updateTargetNetwork = 1000
@@ -180,7 +184,7 @@ def main():
 
             cur_state = new_state
             i += 1
-            if trial > 900:
+            if trial >= 3000:
                 #####################################################################################
                 #print "trail is :",trial
                 env.render()
@@ -224,6 +228,7 @@ def main():
 
     print("Completed in {} trials".format(trial))
     dqn_agent.save_model("success.model")
+    print "model.get_weights():",dqn_agent.model.get_weights()
     #break
 
 

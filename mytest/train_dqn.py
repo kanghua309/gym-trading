@@ -27,8 +27,8 @@ class DQNAgent:
                  memory_size=2000,
                  train_interval=100,
                  gamma=0.95,
-                 learning_rate=0.001,
-                 batch_size=64,
+                 learning_rate=0.00001,
+                 batch_size=64,# 64 TODO
                  epsilon_min=0.01
                  ):
         self.state_size = state_size
@@ -87,15 +87,20 @@ class DQNAgent:
             #action[np.argmax(act_values[0])] = 1
             #print "x:",np.argmax(act_values[0])
             action = np.argmax(act_values[0])
+            print "------------------------ qval:", np.argmax(act_values),act_values[0],state
+
         #print "action:", action
         return action
 
     def observe(self, state, action, reward, next_state, done, warming_up=False):
         """Memory Management and training of the agent
         """
+        #print "0 DEBuG .....:", self.i
+
         self.i = (self.i + 1) % self.memory_size
         self.memory[self.i] = (state, action, reward, next_state, done)
         if (not warming_up) and (self.i % self.train_interval) == 0:
+            #print "1 DEBuG .....:",self.i
             if self.epsilon > self.epsilon_min:
                 self.epsilon -= self.epsilon_decrement
             state, action, reward, next_state, done = self._get_batches()
@@ -115,7 +120,7 @@ class DQNAgent:
             action_batch = np.where(one_hot == 1)
             #print "batch:",action_batch
             q_target[action_batch] = reward
-
+            #print "----q target:",reward
             return self.brain.fit(state, q_target,
                                   batch_size=self.batch_size,
                                   epochs=1,
@@ -159,7 +164,7 @@ if __name__ == "__main__":
     #from tgym.gens.deterministic import WavySignal
     # Instantiating the environmnent
     #generator = WavySignal(period_1=25, period_2=50, epsilon=-0.5)
-    episodes = 50
+    episodes = 500
     episode_length = 400
     trading_fee = .2
     time_fee = 0
@@ -177,7 +182,7 @@ if __name__ == "__main__":
 
     state = environment.reset()
     # Instantiating the agent
-    memory_size = 100
+    memory_size = 1000
     state_size = len(state)
     gamma = 0.96
     epsilon_min = 0.01
@@ -215,15 +220,16 @@ if __name__ == "__main__":
             action = agent.act(state)
             next_state, reward, done, _ = environment.step(action)
             loss = agent.observe(state, action, reward, next_state, done)
+            #print "1 DEBUG loss :",loss
             state = next_state
             rew += reward
             if done == True:
                 environment.reset()
                 continue
-        print("Ep:" + str(ep)
-              + "| rew:" + str(round(rew, 2))
-              + "| eps:" + str(round(agent.epsilon, 2))
-              + "| loss:" + str(round(loss.history["loss"][0], 4)))
+        #print("Ep:" + str(ep)
+        #      + "| rew:" + str(round(rew, 2))
+        #      + "| eps:" + str(round(agent.epsilon, 2))
+        #      + "| loss:" + str(round(loss.history["loss"][0], 4)))
 
     # Running the agent
     print "Train  over .............."
@@ -239,4 +245,4 @@ if __name__ == "__main__":
             done = True
         else:
             print "render  True .............."
-            environment.render()
+            #environment.render()
