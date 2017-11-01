@@ -3,42 +3,77 @@
 import gym_trading  #必须引入才自动注册
 import gym
 import numpy as np
-import pandas as pd
-import random
-from keras.models import Sequential
-from keras.layers.core import Dense, Dropout, Activation
-from keras.layers.recurrent import LSTM
-from keras.optimizers import RMSprop, Adam
 
-from collections import deque
 
 from keras.models import load_model
+import logging
+import click
 
 
-if __name__ == "__main__":
-    print "__________________________________________________________"
+log = logging.getLogger(__name__)
+logging.basicConfig()
+log.setLevel(logging.INFO)
+log.info('%s logger started.',__name__)
+
+
+@click.command()
+
+
+@click.option(
+    '-s',
+    '--symbol',
+    default='000001',
+    show_default=True,
+    help='given stock code ',
+)
+@click.option(
+    '-b',
+    '--begin',
+    default='2015-09-01',
+    show_default=True,
+    help='The begin date of the train.',
+)
+
+@click.option(
+    '-e',
+    '--end',
+    default='2017-09-01',
+    show_default=True,
+    help='The end date of the train.',
+)
+
+@click.option(
+    '-d',
+    '--days',
+    type=int,
+    default=252,
+    help='train days',
+)
+
+
+@click.option(
+     '--plot/--no-plot',
+     #default=os.name != "nt",
+     is_flag = True,
+     default=False,
+     help="render when training"
+)
+
+def execute(symbol,begin,end,days,plot):
     model = load_model('success.model')
-    print "model.get_weights():",model.get_weights()
-
     env = gym.make('trading-v0').env
-    env.initialise(symbol='000001', start='2015-01-01', end='2017-01-01', days=252)
+    env.initialise(symbol=symbol, start=begin, end=end, days=252)
 
     state = env.reset()
-    print "state0:", state
     done = False
     while not done:
-        #action = agent.act(state)
         state = state.reshape(1, 1, 8)
-        print "state:",state
-        qval = model.predict(state,batch_size=1)
-        # action[np.argmax(act_values[0])] = 1
-        # print "x:",np.argmax(act_values[0])
-        print "qval:",qval
-
+        qval = model.predict(state, batch_size=1)
         action = (np.argmax(qval))
-        print "action:", action
         state, _, done, info = env.step(action)
-        print info
+        log.info("%s,%s,%s,%s",state, _, done, info)
+        if plot :
+            env.render()
 
-        print "render  True .............."
-        env.render()
+if __name__ == "__main__":
+    execute()

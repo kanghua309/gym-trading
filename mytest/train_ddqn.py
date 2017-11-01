@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-
-import gym_trading  #必须引入才自动注册
+import click
 import gym
+import gym_trading  #必须引入才自动注册
 import numpy as np
 import pandas as pd
 import random
@@ -12,6 +12,8 @@ from keras.layers.recurrent import LSTM
 from keras.optimizers import RMSprop, Adam
 
 from collections import deque
+from zipline.utils.cli import Date
+
 import matplotlib.pyplot as plt
 
 class DQN:
@@ -226,6 +228,39 @@ def main():
     dqn_agent.save_model("success.model")
     #break
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
+    print "Let's go ................. "
     main()
+
+'''
+
+
+@click.command()
+
+@click.option(
+    '-s',
+    '--start',
+    type=Date(tz='utc', as_timestamp=True),
+    help='The start date of the train.',
+)
+
+@click.option(
+    '-e',
+    '--end',
+    type=Date(tz='utc', as_timestamp=True),
+    help='The start date of the train.',
+)
+
+@click.option(
+    '-e',
+    '--end',
+    type=Date(tz='utc', as_timestamp=True),
+    help='The start date of the train.',
+)
+
+
+
+if __name__ == '__main__':
+    print "Let's go ................. "
+    execute()
+'''

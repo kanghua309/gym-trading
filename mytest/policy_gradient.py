@@ -143,7 +143,7 @@ class PolicyGradient(object) :
             rs.append(reward)
             day += 1
             if done:
-                print "episode %s is done" % episode
+                #print "episode %s is done" % episode
                 running_reward = running_reward * 0.99 + reward_sum * 0.01
                 epx = np.vstack(xs)
                 epr = np.vstack(rs)
@@ -170,11 +170,11 @@ class PolicyGradient(object) :
                         vict = pd.DataFrame( { 'sim': simrors[episode-100:episode],
                                                'mkt': mktrors[episode-100:episode] } )
                         vict['net'] = vict.sim - vict.mkt
-                        if vict.net.mean() > 0.2:
+                        if vict.net.mean() > 2.0:
                             victory = True
                             log.info('Congratulations, Warren Buffet!  You won the trading game.')
                             #print ('Congratulations, Warren Buffet!  You won the trading game.')
-                    #print("Model saved in file: {}".format(save_path))
+                    print("Model saved in file: {}".format(save_path))
 
                 
                     
