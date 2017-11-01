@@ -172,6 +172,7 @@ class DQN:
     help='train round',
 )
 
+
 @click.option(
      '--plot/--no-plot',
      #default=os.name != "nt",
@@ -180,13 +181,21 @@ class DQN:
      help="render when training"
 )
 
-def execute(symbol,begin,end,days,train_round,plot):
+@click.option(
+    '-m',
+    '--model_path',
+    default='.',
+    show_default=True,
+    help='trained model save path.',
+)
+
+def execute(symbol,begin,end,days,train_round,plot,model_path):
 
     env = gym.make('trading-v0').env
     env.initialise(symbol=symbol, start=begin, end=end, days=days)
 
     trials = train_round
-    trial_len = 500
+    trial_len = env.src.days
     dqn_agent = DQN(env=env)
     simrors = np.zeros(trials)
     mktrors = np.zeros(trials)
@@ -233,9 +242,9 @@ def execute(symbol,begin,end,days,train_round,plot):
                         victory = True
                         log.info('Congratulations, Warren Buffet!  You won the trading game.')
                 break
-
-    log.info("Completed in %d trials",trial)
-    dqn_agent.save_model("success.model")
+    import os
+    log.info("Completed in %d trials , save it as %s",trial,os.path.join(model_path,dqn_agent.env.src.symbol + ".model"))
+    dqn_agent.save_model(os.path.join(model_path,dqn_agent.env.src.symbol + ".model"))
 
 
 

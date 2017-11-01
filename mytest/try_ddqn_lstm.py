@@ -59,8 +59,16 @@ log.info('%s logger started.',__name__)
      help="render when training"
 )
 
-def execute(symbol,begin,end,days,plot):
-    model = load_model('success.model')
+@click.option(
+    '-m',
+    '--model_path',
+    default='000001.model',
+    show_default=True,
+    help='trained model save path.',
+)
+
+def execute(symbol,begin,end,days,plot,model_path):
+    model = load_model(model_path)
     env = gym.make('trading-v0').env
     env.initialise(symbol=symbol, start=begin, end=end, days=252)
 
