@@ -194,7 +194,7 @@ class DQN:
 )
 
 def execute(symbol,begin,end,days,train_round,plot,model_path):
-
+    print "---------------------------------------1 "
     env = gym.make('trading-v0').env
     env.initialise(symbol=symbol, start=begin, end=end, days=days)
 
