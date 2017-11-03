@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 from me.helper.research_env import Research
 import matplotlib.pyplot as plt
+from talib.abstract import *
 
 import tempfile
 
@@ -33,7 +34,6 @@ class ZiplineEnvSrc(object):
   # Quandl-based implementation of a TradingEnv's data source.
   # Pulls data from Quandl, preps for use by TradingEnv and then
   # acts as data provider for each new episode.
-
   def __init__(self,symbol,start,end,days=252, scale=True):
     self.symbol = symbol
     self.days = days + 1
@@ -43,27 +43,32 @@ class ZiplineEnvSrc(object):
     log.info('getting data for %s from zipline bundle...', symbol)
     research = Research()
 
-    #log.info('got data for %s from quandl...', QuandlEnvSrc.Name)
-    panel = research.get_pricing([self.symbol],start,end,'1d',['close','low','high','open','volume'])
+    panel = research.get_pricing([self.symbol],start,end,'1d',['open','high','low','close','volume'])
     _df = panel.transpose(2, 1, 0).iloc[0]
 
-
-    #df = df[~np.isnan(df.volume)][['close', 'volume']]
-    # we calculate returns and percentiles, then kill nans
-    #df = df[['close', 'volume']]
     _df.volume.replace(0, 1, inplace=True)  # days shouldn't have zero volume..
     _df.dropna(axis=0, inplace=True)
     assert not np.any(np.isnan(_df))
 
     df = pd.DataFrame()
+    ##########################
+    close = _df['close'].values
+    sma15 = SMA(_df, timeperiod=5)
+    sma60 = SMA(_df, timeperiod=15)
+    rsi = RSI(_df, timeperiod=5)
+    atr = ATR(_df, timeperiod=5)
+
     df['Return'] = (_df.close-_df.close.shift())/_df.close.shift() # today return
-    df['H20'] = zscore(ret(_df.high,_df.open))
-    df['L20'] = zscore(ret(_df.low,_df.open))
-    df['C2O'] = zscore(ret(_df.close,_df.open))
-    df['H2C'] = zscore(ret(_df.high,_df.close))
-    df['L2C'] = zscore(ret(_df.low,_df.close))
-    df['H2L'] = zscore(ret(_df.high,_df.low))
+    df['SMA15'] = zscore(sma15)
+    df['SMA60'] = zscore(sma60)
+    df['C-SMA15'] = zscore(close - sma15)
+    df['SMA15-SMA60'] = zscore(sma15 - sma60)
+    df['RSI'] = zscore(rsi)
+    df['ATR'] = zscore(atr)
     df['VOL'] = zscore(_df.volume)
+    df['CLOSE'] = zscore(_df.close)
+
+    df.dropna(axis=0,inplace=True)
 
     self.min_values = df.min(axis=0)
     self.max_values = df.max(axis=0)
@@ -72,8 +77,8 @@ class ZiplineEnvSrc(object):
     self.orgin_idx = 0
     self.prices = _df.close
 
-  def reset(self):
 
+  def reset(self):
     self.idx = np.random.randint(low=0, high=len(self.data.index) - self.days)
     self.step = 0
     self.orgin_idx = self.idx  #for render , so record it
@@ -87,9 +92,6 @@ class ZiplineEnvSrc(object):
     self.step += 1
     done = self.step >= self.days
     return obs, done
-
-
-
 
 class TradingSim(object) :
   """ Implements core trading simulator for single-instrument univ """
@@ -110,9 +112,6 @@ class TradingSim(object) :
     self.trades = np.zeros(self.steps)
     self.mkt_retrns = np.zeros(self.steps)
 
-
-
-
   def reset(self, train=True):
 
     self.step = 0
@@ -126,8 +125,6 @@ class TradingSim(object) :
     self.mkt_retrns.fill(0)
 
   def _step(self, action, retrn ):
-    """ Given an action and return for prior period, calculates costs, navs,
-        etc and returns the reward and a  summary of the day's activity. """
 
     bod_posn = 0.0 if self.step == 0 else self.posns[self.step-1]
     bod_nav  = 1.0 if self.step == 0 else self.navs[self.step-1]
@@ -144,8 +141,8 @@ class TradingSim(object) :
     self.costs[self.step] = trade_costs_pct +  self.time_cost_bps
     reward = ( (bod_posn * retrn) - self.costs[self.step] )
     self.strat_retrns[self.step] = reward
-    log.debug ("debug ----- :action:%d,bod_posn,%d,posn:%d,trades:%d,trade_costs_pct:%f,costs:%f,reward:%f" % (action,
-                                                                                                bod_posn,
+    logging.debug("debug ----- :retrn:%f,action:%d,bod_posn,%d,posn:%d,trades:%d,trade_costs_pct:%f,costs:%f,reward:%f" % (retrn,action,
+                                                                                                 bod_posn,
                                                                                                  self.posns[self.step],
                                                                                                  self.trades[self.step],
                                                                                                  trade_costs_pct,
@@ -155,7 +152,7 @@ class TradingSim(object) :
     if self.step != 0 :
       self.navs[self.step] =  bod_nav * (1 + self.strat_retrns[self.step-1])
       self.mkt_nav[self.step] =  mkt_nav * (1 + self.mkt_retrns[self.step-1])
-    
+
     info = { 'reward': reward, 'nav':self.navs[self.step], 'costs':self.costs[self.step] ,'pos': self.posns[self.step]}
     self.step += 1      
     return reward, info
@@ -211,7 +208,7 @@ class TradingEnv(gym.Env):
   def initialise(self,symbol,start,end,days):
       self.days = days
       self.src = ZiplineEnvSrc(symbol=symbol, start=start, end=end, days=self.days)
-      self.sim = TradingSim(steps=self.days, trading_cost_bps=1e-3, time_cost_bps=1e-4)
+      self.sim = TradingSim(steps=self.days, trading_cost_bps=1e-4, time_cost_bps=1e-4)#TODO FIX
 
       self.action_space = spaces.Discrete(3)
       self.observation_space = spaces.Box(self.src.min_values,
@@ -244,15 +241,13 @@ class TradingEnv(gym.Env):
     return self.src._step()[0]
 
   def _plot_trades(self):
-
     ####################################################################
     plt.subplot(3, 1, 1)
     p = self.src.prices[self.src.orgin_idx:]  #TODO
     p = p.reset_index(drop=True).head(self.days)
     p.plot(style='kx-', label = 'price')
     l = ['price']
-    # --- plot trades
-    # colored line for long positions
+
     idx = (pd.Series(self.sim.trades) > 0)
     if idx.any():
       p[idx].plot(style='go')
@@ -267,7 +262,6 @@ class TradingEnv(gym.Env):
     plt.legend(l ,loc='upper right')
     plt.title('trades')
     plt.draw()
-
     ####################################################################
     plt.subplot(3, 1, 2)
     pd.Series(self.sim.mkt_nav).plot(style='g')
@@ -309,7 +303,6 @@ class TradingEnv(gym.Env):
     count =0
     while not done:
       action = strategy( observation, self ) # call strategy
-
       observation, reward, done, info = self.step(action)
       count += 1
       print observation, reward, done, info, count

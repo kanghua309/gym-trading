@@ -16,8 +16,12 @@ from keras.models import Sequential
 from keras.optimizers import Adam
 import gym
 import gym_trading  #必须引入才自动注册
+import logging
 
-
+log = logging.getLogger(__name__)
+logging.basicConfig()
+log.setLevel(logging.INFO)
+log.info('%s logger started.',__name__)
 class DQNAgent:
     def __init__(self,
                  state_size,
@@ -87,7 +91,7 @@ class DQNAgent:
             #action[np.argmax(act_values[0])] = 1
             #print "x:",np.argmax(act_values[0])
             action = np.argmax(act_values[0])
-            print "------------------------ qval:", np.argmax(act_values),act_values[0],state
+            #print "------------------------ qval:", np.argmax(act_values),act_values[0],state
 
         #print "action:", action
         return action
@@ -178,7 +182,7 @@ if __name__ == "__main__":
                                 episode_length=episode_length)
     '''
     environment = gym.make('trading-v0').env
-    environment.initialise(symbol='000001', start='2015-01-01', end='2017-01-01', days=252)
+    environment.initialise(symbol='000001', start='2015-09-01', end='2017-09-01', days=252)
 
     state = environment.reset()
     # Instantiating the agent

@@ -19,7 +19,7 @@ import gym_trading.envs.trading_env as te
 
 log = logging.getLogger(__name__)
 logging.basicConfig()
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 log.info('%s logger started.',__name__)
 
 class PolicyGradient(object) :
@@ -94,7 +94,7 @@ class PolicyGradient(object) :
 
     def train_model(self, env, episodes=100, 
                     load_model = False,  # load model from checkpoint if available:?
-                    model_dir = '/tmp/pgmodel/', log_freq=10 ) :
+                    model_dir = '/tmp/pgmodel/', log_freq=1 ) :
 
         # initialize variables and load model
         init_op = tf.global_variables_initializer()
@@ -164,19 +164,19 @@ class PolicyGradient(object) :
                              running_reward, simrors[episode],mktrors[episode], simrors[episode]-mktrors[episode])
                     #print('year #%6d, mean reward: %8.4f, sim ret: %8.4f, mkt ret: %8.4f, net: %8.4f', episode,
                     #         running_reward, simrors[episode], mktrors[episode], simrors[episode] - mktrors[episode])
-                    save_path = self._saver.save(self._sess, model_dir+'model.ckpt',
-                                                 global_step=episode+1)
-                    if episode > 100:
-                        vict = pd.DataFrame( { 'sim': simrors[episode-100:episode],
-                                               'mkt': mktrors[episode-100:episode] } )
+                    #save_path = self._saver.save(self._sess, model_dir+'model.ckpt',
+                    #                             global_step=episode+1)
+                    if episode > 10:
+                        vict = pd.DataFrame( { 'sim': simrors[episode-10:episode],
+                                               'mkt': mktrors[episode-10:episode] } )
                         vict['net'] = vict.sim - vict.mkt
-                        if vict.net.mean() > 2.0:
+                        log.info('vict:%f', vict.net.mean())
+                        if vict.net.mean() > 0.1:
                             victory = True
                             log.info('Congratulations, Warren Buffet!  You won the trading game.')
-                            #print ('Congratulations, Warren Buffet!  You won the trading game.')
-                    print("Model saved in file: {}".format(save_path))
+                            self._saver.save(self._sess,
+                                                 os.path.join(model_dir, env.src.symbol + ".model"))
 
-                
                     
                 episode += 1
                 observation = env.reset()

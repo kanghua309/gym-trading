@@ -21,11 +21,11 @@ class DQN:
         self.env = env
         self.memory = deque(maxlen=2000)
 
-        self.gamma = 0.95
+        self.gamma = 0.995
         self.epsilon = 1.0
-        self.epsilon_min = 0.01
+        self.epsilon_min = 0.11
         self.epsilon_decay = 0.995
-        self.learning_rate = 0.0003
+        self.learning_rate = 0.000003
         self.tau = .125
         self.batch_size = 64
         self.state_size = self.env.observation_space.shape[0]
@@ -79,7 +79,7 @@ class DQN:
             return self.env.action_space.sample()
         #return np.argmax(self.model.predict(state,batch_size=1))
         qval = self.model.predict(state)[0]
-        print "------------------------ qval:", np.argmax(qval),qval,state
+        #print "------------------------ qval:", np.argmax(qval),qval,state
         return np.argmax(self.model.predict(state)[0])
 
     def remember(self, state, action, reward, new_state, done):
@@ -113,7 +113,7 @@ class DQN:
         q_target[action_batch] = reward
         return self.model.fit(state, q_target,
                               batch_size=self.batch_size,
-                              epochs=10,
+                              epochs=1,
                               verbose=False)
 
 
@@ -149,8 +149,10 @@ class DQN:
 
 
 def main():
+    import os
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     env = gym.make('trading-v0').env
-    env.initialise(symbol='000001', start='2015-01-01', end='2017-01-01', days=252)
+    env.initialise(symbol='000001', start='2016-09-01', end='2017-09-01', days=100)
 
     trials = 1000
     trial_len = 500
@@ -181,10 +183,10 @@ def main():
             cur_state = new_state
             i += 1
 
-            if trial > 3000:
+            #if trial > 3000:
                 #####################################################################################
-                print "trail is :",trial
-                env.render()
+                #print "trail is :",trial
+                #env.render()
 
 
             ####################################################################################
@@ -213,12 +215,12 @@ def main():
 
                 #print simrors[i - 100:i]
                 #print mktrors[i - 100:i]
-                if trial > 30:
-                    vict = pd.DataFrame({'sim': simrors[trial - 1:trial],
-                                         'mkt': mktrors[trial - 1:trial]})
+                if trial > 10:
+                    vict = pd.DataFrame({'sim': simrors[trial - 10:trial],
+                                         'mkt': mktrors[trial - 10:trial]})
                     vict['net'] = vict.sim - vict.mkt
                     print('vict:',vict.net.mean())
-                    if vict.net.mean() > 30.0:
+                    if vict.net.mean() > 0.2:
                         victory = True
                         print('Congratulations, Warren Buffet!  You won the trading game.')
                 break
