@@ -173,7 +173,7 @@ class PolicyGradient(object):
                                              'mkt': mktrors[episode - 10:episode]})
                         vict['net'] = vict.sim - vict.mkt
                         log.info('vict:%f', vict.net.mean())
-                        if vict.net.mean() > 0.1:
+                        if vict.net.mean() > 0.2:
                             victory = True
                             log.info('Congratulations, Warren Buffet!  You won the trading game ,model save as:%s',os.path.join(model_dir, env.src.symbol + ".model"))
                             self._saver.save(self._sess,os.path.join(model_dir, env.src.symbol + ".model"))

@@ -1,106 +1,113 @@
+import sys
+import gym
+import pylab
+import numpy as np
+from keras.layers import Dense
+from keras.models import Sequential
+from keras.optimizers import Adam
+
 import gym
 import click
 
 import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense, Reshape, Flatten
-from keras.optimizers import Adam
+from keras.optimizers import Adam,RMSprop
 import gym_trading
 import logging
 import pandas as pd
 
+PLOT_AFTER_ROUND = 1
 
 log = logging.getLogger(__name__)
 logging.basicConfig()
 log.setLevel(logging.INFO)
 log.info('%s logger started.', __name__)
-
-class PGAgent:
+# This is Policy Gradient agent for the Cartpole
+# In this example, we use REINFORCE algorithm which uses monte-carlo update rule
+class REINFORCEAgent:
     def __init__(self, state_size, action_size):
+        # if you want to see Cartpole learning, then change to True
+        self.render = False
+        self.load_model = False
+        # get size of state and action
         self.state_size = state_size
         self.action_size = action_size
-        self.gamma = 0.99
+
+        # These are hyper parameters for the Policy Gradient
+        self.discount_factor = 0.99
         self.learning_rate = 0.001
-        self.states = []
-        self.gradients = []
-        self.rewards = []
-        self.probs = []
-        self.model = self._build_model()
-        self.model.summary()
-    '''
-    def _build_model(self):
-        model = Sequential()
-        model.add(Reshape((1, 80, 80), input_shape=(self.state_size,)))
-        model.add(Convolution2D(32, 6, 6, subsample=(3, 3), border_mode='same',
-                                activation='relu', init='he_uniform'))
-        model.add(Flatten())
-        model.add(Dense(64, activation='relu', init='he_uniform'))
-        model.add(Dense(32, activation='relu', init='he_uniform'))
-        model.add(Dense(self.action_size, activation='softmax'))
-        opt = Adam(lr=self.learning_rate)
-        model.compile(loss='categorical_crossentropy', optimizer=opt)
-        return model
-    '''
+        self.hidden1, self.hidden2 = 32, 32
 
-    def _build_model(self):
+        # create model for policy network
+        self.model = self.build_model()
+
+        # lists for the states, actions and rewards
+        self.states, self.actions, self.rewards = [], [], []
+
+        #if self.load_model:
+        #    self.model.load_weights("./save_model/cartpole_reinforce.h5")
+
+    # approximate policy using Neural Network
+    # state is input and probability of each action is output of network
+    def build_model(self):
         model = Sequential()
-        neurons_per_layer = 32
-        activation = "relu"
-        model.add(Dense(neurons_per_layer,
-                        input_dim=self.state_size,
-                        activation=activation))
-        model.add(Dense(neurons_per_layer, activation=activation))
-        model.add(Dense(self.action_size,  activation='softmax'))
-        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        model.add(Dense(self.hidden1, input_dim=self.state_size, activation='relu', kernel_initializer='glorot_uniform'))
+        model.add(Dense(self.hidden2, activation='relu', kernel_initializer='glorot_uniform'))
+        model.add(Dense(self.action_size, activation='softmax', kernel_initializer='glorot_uniform'))
+        model.summary()
+        # Using categorical crossentropy as a loss is a trick to easily
+        # implement the policy gradient. Categorical cross entropy is defined
+        # H(p, q) = sum(p_i * log(q_i)). For the action taken, a, you set
+        # p_a = advantage. q_a is the output of the policy network, which is
+        # the probability of taking the action a, i.e. policy(s, a).
+        # All other p_i are zero, thus we have H(p, q) = A * log(policy(s, a))
+        model.compile(loss="categorical_crossentropy", optimizer=Adam(lr=self.learning_rate))
         return model
 
-    def remember(self, state, action, prob, reward):
-        #print "state:",np.shape(state)
-        y = np.zeros([self.action_size])
-        y[action] = 1
-        self.gradients.append(np.array(y).astype('float32') - prob)
-        self.states.append(state)
-        self.rewards.append(reward)
+    # using the output of policy network, pick action stochastically
+    def get_action(self, state):
+        policy = self.model.predict(state, batch_size=1).flatten()
+        return np.random.choice(self.action_size, 1, p=policy)[0]
 
-    def act(self, state):
-        state = state.reshape(1, self.state_size)
-        #print "act:",np.shape(state)
-        aprob = self.model.predict(state, batch_size=1).flatten()
-        self.probs.append(aprob)
-        prob = aprob / np.sum(aprob)
-        #print "prop:",prob
-        action = np.random.choice(self.action_size, 1, p=prob)[0]
-        #print "action:",action
-        return action, prob
 
+
+    # In Policy Gradient, Q function is not available.
+    # Instead agent uses sample returns for evaluating policy
     def discount_rewards(self, rewards):
         discounted_rewards = np.zeros_like(rewards)
         running_add = 0
-        for t in reversed(range(0, rewards.size)):
-            if rewards[t] != 0:
-                running_add = 0
-            running_add = running_add * self.gamma + rewards[t]
+        for t in reversed(range(0, len(rewards))):
+            running_add = running_add * self.discount_factor + rewards[t]
             discounted_rewards[t] = running_add
         return discounted_rewards
 
-    def train(self):
-        gradients = np.vstack(self.gradients)
-        rewards = np.vstack(self.rewards)
-        rewards = self.discount_rewards(rewards)
-        rewards = rewards / np.std(rewards - np.mean(rewards))
-        gradients *= rewards
-        X = np.squeeze(([self.states]))
-        #X = self.states
-        Y = self.probs + self.learning_rate * np.squeeze(np.vstack([gradients]))
-        #print "X:", np.shape(X) , " Y:",np.shape(Y)
-        self.model.train_on_batch(X, Y)
-        self.states, self.probs, self.gradients, self.rewards = [], [], [], []
+    # save <s, a ,r> of each step
+    def append_sample(self, state, action, reward):
+        self.states.append(state)
+        self.rewards.append(reward)
+        self.actions.append(action)
 
-    def load_model(self, name):
-        self.model.load_weights(name)
+    # update policy network every episode
+    def train_model(self):
+        episode_length = len(self.states)
 
-    def save_model(self, name):
-        self.model.save_weights(name)
+        discounted_rewards = self.discount_rewards(self.rewards)
+        discounted_rewards -= np.mean(discounted_rewards)
+        discounted_rewards /= np.std(discounted_rewards)
+
+        update_inputs = np.zeros((episode_length, self.state_size))
+        advantages = np.zeros((episode_length, self.action_size))
+
+        for i in range(episode_length):
+            update_inputs[i] = self.states[i]
+            advantages[i][self.actions[i]] = discounted_rewards[i]
+
+        self.model.fit(update_inputs, advantages, epochs=1, verbose=0)
+        self.states, self.actions, self.rewards = [], [], []
+
+    def save_model(self, fn):
+        self.model.save(fn)
 
 @click.command()
 @click.option(
@@ -160,58 +167,71 @@ class PGAgent:
 )
 
 def execute(symbol,begin,end,days,train_round,plot,model_path):
-    trial = train_round
-
+    # In case of CartPole-v1, you can play until 500 time step
     env = gym.make('trading-v0').env
     env.initialise(symbol=symbol, start=begin, end=end, days=days)
-    state = env.reset()
+    EPISODES = train_round
+    # get size of state and action from environment
+    state_size = env.observation_space.shape[0]
+    action_size = env.action_space.n
 
-    agent = PGAgent(env.observation_space.shape[0], env.action_space.n)
-    episode = 0
-    score = 0
+    # make REINFORCE agent
+    agent = REINFORCEAgent(state_size, action_size)
+
+    scores, episodes = [], []
+    simrors = np.zeros(EPISODES)
+    mktrors = np.zeros(EPISODES)
     victory = False
-    simrors = np.zeros(trial)
-    mktrors = np.zeros(trial)
-    while episode < trial and not victory :
-        action,prob = agent.act(state)
-        new_state,reward,done,info = env.step(action)
-        new_state = state.reshape(1, env.observation_space.shape[0])
-        agent.remember(new_state,action,prob,reward)
-        score += reward
-        #print('Episode: %d - Score: %f.' % (episode, score))
-        if done:
-            #print('Episode: %d - Score: %f.' % (episode, score))            # pdb.set_trace()
-            df = env.sim.to_df()
-            simrors[episode] = df.bod_nav.values[-1] - 1  # compound returns
-            mktrors[episode] = df.mkt_nav.values[-1] - 1
-            #alldf = df if alldf is None else pd.concat([alldf, df], axis=0)
-            if episode % 10 == 0:
-                log.info('year #%6d, sim ret: %8.4f, mkt ret: %8.4f, net: %8.4f', episode,
-                         simrors[episode], mktrors[episode], simrors[episode] - mktrors[episode])
+    for episode in range(EPISODES):
+        if victory:
+            break
+        done = False
+        state = env.reset()
+        state = np.reshape(state, [1, state_size])
 
-                if episode > 10:
-                    vict = pd.DataFrame({'sim': simrors[episode - 10:episode],
-                                         'mkt': mktrors[episode - 10:episode]})
-                    vict['net'] = vict.sim - vict.mkt
-                    log.info('vict:%f', vict.net.mean())
-                    if vict.net.mean() > 0.1:
-                        victory = True
-                        log.info('Congratulations, Warren Buffet!  You won the trading game ',)
-                        break
-            agent.train()
-            state = env.reset()
-            state = state.reshape(1, env.observation_space.shape[0])
+        while not done:
+            if episode >= PLOT_AFTER_ROUND:
+                #####################################################################################
+                if plot:
+                    env.render()
+                ####################################################################################
+            # get action for the current state and go one step in environment
+            action = agent.get_action(state)
+            next_state, reward, done, info = env.step(action)
+            next_state = np.reshape(next_state, [1, state_size])
+            #reward = reward if not done or score == 499 else -100
 
-            episode += 1
-            score = 0
+            # save the sample <s, a, r> to the memory
+            agent.append_sample(state, action, reward)
+
+            state = next_state
+
+            if done:
+                df = env.sim.to_df()
+                simrors[episode] = df.bod_nav.values[-1] - 1  # compound returns
+                mktrors[episode] = df.mkt_nav.values[-1] - 1
+                if episode % 100 == 0:
+                    log.info('year #%6d, sim ret: %8.4f, mkt ret: %8.4f, net: %8.4f', episode,
+                             simrors[episode], mktrors[episode], simrors[episode] - mktrors[episode])
+                    if episode > 10:
+                        vict = pd.DataFrame({'sim': simrors[episode - 10:episode],
+                                             'mkt': mktrors[episode - 10:episode]})
+                        vict['net'] = vict.sim - vict.mkt
+                        log.info('vict:%f', vict.net.mean())
+                        if vict.net.mean() > 0.2:
+                            victory = True
+                            log.info('Congratulations, Warren Buffet!  You won the trading game ', )
+                            break
+
+                # every episode, agent learns from sample returns
+                agent.train_model()
+                episodes.append(episode)
+
     import os
-    log.info("Completed in %d trials , save it as %s", trial,
+    log.info("Completed in %d trials , save it as %s", episode,
              os.path.join(model_path, env.src.symbol + ".model"))
     agent.save_model(os.path.join(model_path, env.src.symbol + ".model"))
 
 
-
 if __name__ == "__main__":
     execute()
-
-

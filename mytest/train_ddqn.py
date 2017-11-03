@@ -10,12 +10,15 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from keras.layers.recurrent import LSTM
 from keras.optimizers import RMSprop, Adam
+import logging
 
 from collections import deque
-from zipline.utils.cli import Date
 
-import matplotlib.pyplot as plt
-
+PLOT_AFTER_ROUND = 1
+log = logging.getLogger(__name__)
+logging.basicConfig()
+log.setLevel(logging.INFO)
+log.info('%s logger started.', __name__)
 class DQN:
     def __init__(self, env):
         self.env = env
@@ -36,7 +39,6 @@ class DQN:
 
     def create_model(self):
         model = Sequential()
-        state_shape = self.env.observation_space.shape
         print 'state_shape:',self.env.observation_space.shape
         model.add(Dense(24, input_dim=self.state_size, activation="relu"))
         model.add(Dense(48, activation="relu"))
@@ -45,30 +47,7 @@ class DQN:
         model.compile(loss="mean_squared_error",
                       optimizer=Adam(lr=self.learning_rate))
         return model
-    '''
-    def create_model(self):
-        model = Sequential()
-        state_shape = self.env.observation_space.shape
-        print 'self.state_size:', self.state_size
-        model.add(LSTM(64,
-                       input_shape=(1, self.state_size),
-                       return_sequences=True,
-                       stateful=False))
-        model.add(Dropout(0.5))
-        model.add(LSTM(64,
-                       input_shape=(1, self.state_size),
-                       return_sequences=False,
-                       stateful=False))
-        model.add(Dropout(0.5))
 
-        model.add(Dense(4, init='lecun_uniform'))
-        model.add(Activation('linear'))  # linear output so we can have range of real-valued outputs
-
-        rms = RMSprop()
-        adam = Adam()
-        model.compile(loss='mse', optimizer=adam)
-        return model
-    '''
 
     def act(self, state):
         """Acting Policy of the DQNAgent
@@ -96,26 +75,15 @@ class DQN:
                    * np.logical_not(done)
                    * np.amax(self.model.predict(next_state),axis=1))
         q_target = self.target_model.predict(state)
-        #reward += (self.gamma
-        #           * np.logical_not(done)
-        #           * np.amax(self.model.predict(next_state,batch_size=1), axis=1))
-        #q_target = self.target_model.predict(state,batch_size=1)
-        # print "state :",state,np.shape(state)
-        # print "reward :",reward,np.shape(reward)
-        # print "action :",action,np.shape(action)
-        # print "q_target :",q_target,np.shape(q_target)
-        # q_target[action[0], action[1]] = reward
-        # where?
+
         _ = pd.Series(action)
         one_hot = pd.get_dummies(_).as_matrix()
         action_batch = np.where(one_hot == 1)
-        # print "batch:",action_batch
         q_target[action_batch] = reward
         return self.model.fit(state, q_target,
                               batch_size=self.batch_size,
                               epochs=1,
                               verbose=False)
-
 
     def _get_batches(self):
         """Selecting a batch of memory
@@ -125,8 +93,7 @@ class DQN:
         batch = np.array(random.sample(self.memory, self.batch_size))
         state_batch = np.concatenate(batch[:, 0]) \
             .reshape(self.batch_size, self.state_size)
-        # action_batch = np.concatenate(batch[:, 1])\
-        #    .reshape(self.batch_size, self.action_size)
+
         action_batch = batch[:, 1]
 
         reward_batch = batch[:, 2]
@@ -148,121 +115,118 @@ class DQN:
         self.model.save(fn)
 
 
-def main():
-    import os
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+@click.command()
+@click.option(
+    '-s',
+    '--symbol',
+    default='000001',
+    show_default=True,
+    help='given stock code ',
+)
+@click.option(
+    '-b',
+    '--begin',
+    default='2016-09-01',
+    show_default=True,
+    help='The begin date of the train.',
+)
+
+@click.option(
+    '-e',
+    '--end',
+    default='2017-09-01',
+    show_default=True,
+    help='The end date of the train.',
+)
+
+@click.option(
+    '-d',
+    '--days',
+    type=int,
+    default=100,
+    help='train days',
+)
+
+@click.option(
+    '-t',
+    '--train_round',
+    type=int,
+    default=1000,
+    help='train round',
+)
+
+
+@click.option(
+     '--plot/--no-plot',
+     #default=os.name != "nt",
+     is_flag = True,
+     default=False,
+     help="render when training"
+)
+
+@click.option(
+    '-m',
+    '--model_path',
+    default='.',
+    show_default=True,
+    help='trained model save path.',
+)
+
+def execute(symbol,begin,end,days,train_round,plot,model_path):
     env = gym.make('trading-v0').env
-    env.initialise(symbol='000001', start='2016-09-01', end='2017-09-01', days=100)
+    env.initialise(symbol=symbol, start=begin, end=end, days=days)
 
-    trials = 1000
-    trial_len = 500
+    EPISODES = train_round
 
-    # updateTargetNetwork = 1000
     dqn_agent = DQN(env=env)
-    #steps = []
-    simrors = np.zeros(trials)
-    mktrors = np.zeros(trials)
+    simrors = np.zeros(EPISODES)
+    mktrors = np.zeros(EPISODES)
     i = 0
     victory = False
-    for trial in range(trials):
+    for episode in range(EPISODES):
         if victory == True:
             break;
-        cur_state = env.reset().reshape(1,env.observation_space.shape[0]) #FIX IT
-        for step in range(trial_len):
+        done = False
+        cur_state = env.reset().reshape(1,env.observation_space.shape[0])
+        while not done:
+            if episode >= PLOT_AFTER_ROUND:
+                #####################################################################################
+                if plot:
+                    env.render()
+                ####################################################################################
             action = dqn_agent.act(cur_state)
-            #print "action;",action,i
             new_state, reward, done, _ = env.step(action)
-            #print  new_state, reward, done, _
-            # reward = reward if not done else -20
             new_state = new_state.reshape(1,env.observation_space.shape[0])
             dqn_agent.remember(cur_state, action, reward, new_state, done)
 
             dqn_agent.replay()  # internally iterates default (prediction) model
             dqn_agent.target_train()  # iterates target model
-
             cur_state = new_state
             i += 1
 
-            #if trial > 3000:
-                #####################################################################################
-                #print "trail is :",trial
-                #env.render()
-
-
-            ####################################################################################
-
             if done:
-                print "done:",trial,step
-                #break
-        #if step >= 199:
-        #    print("Failed to complete in trial {}".format(trial))
-        #    if step % 10 == 0:
-        #        dqn_agent.save_model("trial-{}.model".format(trial))
-        #else:
                 df = env.sim.to_df()
-                #print df.tail()
-                #print df.bod_nav.values[-1]
-                # pdb.set_trace()
-                #print df.bod_nav.values
-                #print df.bod_nav.values[-1]
-                simrors[trial] = df.bod_nav.values[-1] - 1  # compound returns
-                mktrors[trial] = df.mkt_nav.values[-1] - 1
-
-                print('year #%6d, sim ret: %8.4f, mkt ret: %8.4f, net: %8.4f', i,
-                        simrors[trial], mktrors[trial], simrors[trial] - mktrors[trial])
-                #save_path = self._saver.save(self._sess, model_dir + 'model.ckpt',
-                #                             global_step=episode + 1)
-
-                #print simrors[i - 100:i]
-                #print mktrors[i - 100:i]
-                if trial > 10:
-                    vict = pd.DataFrame({'sim': simrors[trial - 10:trial],
-                                         'mkt': mktrors[trial - 10:trial]})
-                    vict['net'] = vict.sim - vict.mkt
-                    print('vict:',vict.net.mean())
-                    if vict.net.mean() > 0.2:
-                        victory = True
-                        print('Congratulations, Warren Buffet!  You won the trading game.')
-                break
+                simrors[episode] = df.bod_nav.values[-1] - 1  # compound returns
+                mktrors[episode] = df.mkt_nav.values[-1] - 1
+                if episode % 100 == 0:
+                    log.info('year #%6d, sim ret: %8.4f, mkt ret: %8.4f, net: %8.4f', episode,
+                             simrors[episode], mktrors[episode], simrors[episode] - mktrors[episode])
+                    if episode > 10:
+                        vict = pd.DataFrame({'sim': simrors[episode - 10:episode],
+                                             'mkt': mktrors[episode - 10:episode]})
+                        vict['net'] = vict.sim - vict.mkt
+                        log.info('vict:%f', vict.net.mean())
+                        if vict.net.mean() > 0.2:
+                            victory = True
+                            log.info('Congratulations, Warren Buffet!  You won the trading game ', )
+                            break
 
 
-    print("Completed in {} trials".format(trial))
-    dqn_agent.save_model("success.model")
+    import os
+    log.info("Completed in %d trials , save it as %s", episode,
+             os.path.join(model_path, dqn_agent.env.src.symbol + ".model"))
+    dqn_agent.save_model(os.path.join(model_path, dqn_agent.env.src.symbol + ".model"))
     #break
 
 if __name__ == '__main__':
-    print "Let's go ................. "
-    main()
-
-'''
-
-
-@click.command()
-
-@click.option(
-    '-s',
-    '--start',
-    type=Date(tz='utc', as_timestamp=True),
-    help='The start date of the train.',
-)
-
-@click.option(
-    '-e',
-    '--end',
-    type=Date(tz='utc', as_timestamp=True),
-    help='The start date of the train.',
-)
-
-@click.option(
-    '-e',
-    '--end',
-    type=Date(tz='utc', as_timestamp=True),
-    help='The start date of the train.',
-)
-
-
-
-if __name__ == '__main__':
-    print "Let's go ................. "
     execute()
-'''
