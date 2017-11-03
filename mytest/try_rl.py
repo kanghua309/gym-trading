@@ -68,6 +68,7 @@ log.info('%s logger started.',__name__)
 )
 
 def execute(symbol,begin,end,days,plot,model_path):
+    print model_path
     model = load_model(model_path)
     env = gym.make('trading-v0').env
     env.initialise(symbol=symbol, start=begin, end=end, days=days)
